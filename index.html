@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DIMENSIA — Sistema de Inspección Dimensional Automatizada</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --azul:       #0A1628;
+    --azul-med:   #102040;
+    --acento:     #1A6BFF;
+    --acento-cl:  #E8F0FF;
+    --blanco:     #FFFFFF;
+    --gris-100:   #F4F6FA;
+    --gris-200:   #E8ECF4;
+    --gris-400:   #9AA3B8;
+    --gris-600:   #5A6380;
+    --verde:      #16A34A;
+    --verde-cl:   #DCFCE7;
+    --rojo:       #DC2626;
+    --rojo-cl:    #FEE2E2;
+    --borde:      rgba(10,22,40,0.08);
+    --radio:      10px;
+    --radio-lg:   16px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--blanco);
+    color: var(--azul);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 40px; height: 60px;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--borde);
+  }
+  .nav-logo { font-size: 18px; font-weight: 600; letter-spacing: -0.03em; color: var(--azul); }
+  .nav-logo span { color: var(--acento); }
+  .nav-links { display: flex; gap: 28px; }
+  .nav-links a { font-size: 13px; color: var(--gris-600); text-decoration: none; transition: color .2s; }
+  .nav-links a:hover { color: var(--azul); }
+  .nav-cta {
+    padding: 8px 20px; background: var(--acento); color: #fff;
+    border: none; border-radius: 8px; font-size: 13px; font-weight: 500;
+    cursor: pointer; font-family: inherit; transition: opacity .2s;
+  }
+  .nav-cta:hover { opacity: 0.88; }
+
+  /* ── HERO ── */
+  .hero {
+    display: grid; grid-template-columns: 1fr 380px; gap: 48px; align-items: center;
+    max-width: 1160px; margin: 0 auto; padding: 80px 40px 72px;
+  }
+  .hero-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--acento); background: var(--acento-cl);
+    padding: 5px 12px; border-radius: 20px; margin-bottom: 20px;
+  }
+  .hero-tag::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--acento); }
+  h1 {
+    font-size: 44px; font-weight: 600; line-height: 1.1;
+    letter-spacing: -0.03em; margin-bottom: 20px;
+  }
+  h1 em { font-style: normal; color: var(--acento); }
+  .hero-sub {
+    font-size: 16px; color: var(--gris-600); line-height: 1.7;
+    max-width: 500px; margin-bottom: 32px;
+  }
+  .hero-btns { display: flex; gap: 12px; }
+  .btn {
+    padding: 11px 24px; border-radius: var(--radio);
+    font-size: 14px; font-weight: 500; cursor: pointer;
+    font-family: inherit; transition: all .2s; text-decoration: none;
+    display: inline-block;
+  }
+  .btn-primary { background: var(--acento); color: #fff; border: none; }
+  .btn-primary:hover { background: #1258d6; }
+  .btn-secondary {
+    background: transparent; color: var(--azul);
+    border: 1px solid var(--borde);
+  }
+  .btn-secondary:hover { background: var(--gris-100); }
+
+  /* ── HERO CARD ── */
+  .hero-card {
+    background: var(--azul); border-radius: var(--radio-lg);
+    padding: 24px; color: #fff;
+    box-shadow: 0 24px 64px rgba(10,22,40,0.18);
+  }
+  .hc-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.45); margin-bottom: 10px; }
+  .hc-result {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(22,163,74,0.2); border: 1px solid rgba(22,163,74,0.4);
+    color: #4ade80; border-radius: 20px; padding: 6px 14px;
+    font-size: 13px; font-weight: 500; margin-bottom: 16px;
+  }
+  .hc-dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .hc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .hc-block {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: var(--radio); padding: 12px;
+  }
+  .hc-block-label { font-size: 10px; color: rgba(255,255,255,0.45); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
+  .hc-block-val { font-family: 'DM Mono', monospace; font-size: 20px; font-weight: 500; }
+  .hc-block-ref { font-size: 10px; color: #4ade80; margin-top: 2px; }
+  .hc-pieza {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radio); padding: 10px 12px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .hc-pieza-name { font-size: 12px; color: rgba(255,255,255,0.7); }
+  .hc-pieza-norma { font-family: 'DM Mono', monospace; font-size: 11px; color: rgba(255,255,255,0.4); }
+  .hc-tiempo { font-size: 10px; color: rgba(255,255,255,0.3); text-align: right; margin-top: 8px; }
+
+  /* ── STATS ── */
+  .stats-bar {
+    border-top: 1px solid var(--borde);
+    border-bottom: 1px solid var(--borde);
+    background: var(--gris-100);
+  }
+  .stats-inner {
+    max-width: 1160px; margin: 0 auto; padding: 0 40px;
+    display: grid; grid-template-columns: repeat(4, 1fr);
+  }
+  .stat {
+    padding: 28px 24px; text-align: center;
+    border-right: 1px solid var(--borde);
+  }
+  .stat:last-child { border-right: none; }
+  .stat-num { font-size: 30px; font-weight: 600; color: var(--acento); letter-spacing: -0.03em; margin-bottom: 4px; }
+  .stat-label { font-size: 12px; color: var(--gris-600); line-height: 1.4; }
+
+  /* ── SECTIONS ── */
+  section { max-width: 1160px; margin: 0 auto; padding: 72px 40px; }
+  .section-full { border-top: 1px solid var(--borde); }
+  .section-tag-line {
+    display: inline-block; font-size: 11px; font-weight: 500;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--acento);
+    margin-bottom: 12px;
+  }
+  h2 { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 10px; }
+  .section-sub { font-size: 15px; color: var(--gris-600); line-height: 1.7; max-width: 580px; margin-bottom: 40px; }
+
+  /* ── FEATURES GRID ── */
+  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .feat {
+    background: var(--gris-100); border: 1px solid var(--borde);
+    border-radius: var(--radio-lg); padding: 24px;
+    transition: transform .2s, box-shadow .2s;
+  }
+  .feat:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(10,22,40,0.08); }
+  .feat-icon {
+    width: 40px; height: 40px; background: var(--acento-cl);
+    border-radius: var(--radio); display: flex; align-items: center; justify-content: center;
+    margin-bottom: 16px;
+  }
+  .feat-icon svg { width: 20px; height: 20px; }
+  .feat h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+  .feat p { font-size: 13px; color: var(--gris-600); line-height: 1.65; }
+
+  /* ── SPECS TABLE ── */
+  .specs-wrap {
+    border: 1px solid var(--borde); border-radius: var(--radio-lg); overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td { padding: 12px 20px; border-bottom: 1px solid var(--borde); }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { color: var(--gris-600); font-weight: 500; width: 280px; background: var(--gris-100); }
+  td:last-child { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--azul); }
+
+  /* ── SECTORES ── */
+  .sectors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .sector {
+    border: 1px solid var(--borde); border-radius: var(--radio-lg);
+    padding: 20px; display: flex; gap: 14px; align-items: flex-start;
+    transition: border-color .2s, background .2s;
+  }
+  .sector:hover { border-color: var(--acento); background: var(--acento-cl); }
+  .sector-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--acento); flex-shrink: 0; margin-top: 4px;
+  }
+  .sector h4 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+  .sector p { font-size: 12px; color: var(--gris-600); }
+
+  /* ── CTA / CONTACTO ── */
+  .cta-wrap {
+    background: var(--azul); border-radius: 20px;
+    display: grid; grid-template-columns: 1fr 380px; gap: 56px;
+    padding: 56px; align-items: center;
+    max-width: 1160px; margin: 0 auto 80px;
+  }
+  .cta-title { font-size: 28px; font-weight: 600; color: #fff; letter-spacing: -0.02em; margin-bottom: 14px; }
+  .cta-sub { font-size: 14px; color: rgba(255,255,255,0.55); line-height: 1.7; margin-bottom: 24px; }
+  .cta-meta { font-size: 12px; color: rgba(255,255,255,0.3); line-height: 2; }
+  .form-card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: var(--radio-lg); padding: 28px;
+  }
+  .form-title { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 18px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 11px; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 10px 12px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: var(--radio); font-size: 13px;
+    color: #fff; font-family: 'DM Sans', sans-serif;
+    outline: none; transition: border-color .2s;
+  }
+  .field input::placeholder, .field textarea::placeholder { color: rgba(255,255,255,0.25); }
+  .field select option { background: var(--azul); color: #fff; }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--acento); }
+  .field textarea { resize: none; height: 80px; }
+  .form-submit {
+    width: 100%; padding: 11px;
+    background: var(--acento); color: #fff;
+    border: none; border-radius: var(--radio);
+    font-size: 14px; font-weight: 500; cursor: pointer;
+    font-family: inherit; margin-top: 4px; transition: opacity .2s;
+  }
+  .form-submit:hover { opacity: 0.88; }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--borde);
+    padding: 24px 40px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .footer-logo { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
+  .footer-logo span { color: var(--acento); }
+  footer p { font-size: 12px; color: var(--gris-400); }
+
+  /* ── ANIMACIONES DE ENTRADA ── */
+  .fade-in { opacity: 0; transform: translateY(20px); transition: opacity .5s ease, transform .5s ease; }
+  .fade-in.visible { opacity: 1; transform: translateY(0); }
+
+  /* ── RESPONSIVE BÁSICO ── */
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; }
+    .hero-card { display: none; }
+    h1 { font-size: 32px; }
+    .features { grid-template-columns: 1fr 1fr; }
+    .sectors { grid-template-columns: 1fr 1fr; }
+    .cta-wrap { grid-template-columns: 1fr; padding: 32px; gap: 32px; }
+    .stats-inner { grid-template-columns: repeat(2,1fr); }
+  }
+  @media (max-width: 600px) {
+    nav { padding: 0 20px; }
+    .nav-links { display: none; }
+    .hero { padding: 40px 20px; }
+    section { padding: 48px 20px; }
+    .features { grid-template-columns: 1fr; }
+    .sectors { grid-template-columns: 1fr; }
+    h1 { font-size: 26px; }
+    h2 { font-size: 22px; }
+    footer { flex-direction: column; gap: 8px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">DIMEN<span>SIA</span></div>
+  <div class="nav-links">
+    <a href="#sistema">El sistema</a>
+    <a href="#specs">Especificaciones</a>
+    <a href="#sectores">Sectores</a>
+    <a href="#contacto">Contacto</a>
+  </div>
+  <button class="nav-cta" onclick="document.getElementById('contacto').scrollIntoView({behavior:'smooth'})">
+    Solicitar demo
+  </button>
+</nav>
+
+<!-- HERO -->
+<div class="hero fade-in">
+  <div>
+    <div class="hero-tag">Control de calidad dimensional</div>
+    <h1>Inspección <em>automatizada</em><br>de accesorios para<br>cañerías industriales</h1>
+    <p class="hero-sub">
+      DIMENSIA detecta piezas fuera de tolerancia en menos de 2 segundos, genera
+      trazabilidad normativa automática y reduce el costo de inspección hasta un
+      70% frente a métodos manuales.
+    </p>
+    <div class="hero-btns">
+      <button class="btn btn-primary" onclick="document.getElementById('contacto').scrollIntoView({behavior:'smooth'})">
+        Solicitar presupuesto
+      </button>
+      <button class="btn btn-secondary" onclick="document.getElementById('sistema').scrollIntoView({behavior:'smooth'})">
+        Ver el sistema
+      </button>
+    </div>
+  </div>
+
+  <div class="hero-card">
+    <div class="hc-label">Resultado en tiempo real</div>
+    <div class="hc-result">
+      <div class="hc-dot"></div>
+      Pieza aprobada
+    </div>
+    <div class="hc-grid">
+      <div class="hc-block">
+        <div class="hc-block-label">Diámetro ext.</div>
+        <div class="hc-block-val">21.34</div>
+        <div class="hc-block-ref">ref. 21.30 ±0.5 mm</div>
+      </div>
+      <div class="hc-block">
+        <div class="hc-block-label">Diámetro int.</div>
+        <div class="hc-block-val">14.02</div>
+        <div class="hc-block-ref">ref. 14.00 ±0.5 mm</div>
+      </div>
+    </div>
+    <div class="hc-block" style="margin-bottom:12px">
+      <div class="hc-block-label">Largo total</div>
+      <div class="hc-block-val">58.2</div>
+      <div class="hc-block-ref">ref. 58.0 ±1.0 mm</div>
+    </div>
+    <div class="hc-pieza">
+      <div>
+        <div class="hc-pieza-name">Niple NPT 1/2"</div>
+        <div class="hc-pieza-norma">ASME B16.11</div>
+      </div>
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+        <circle cx="18" cy="18" r="17" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+        <path d="M11 18L16 23L25 13" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="hc-tiempo">Ciclo completado en 1.8 seg</div>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stats-bar">
+  <div class="stats-inner">
+    <div class="stat fade-in">
+      <div class="stat-num">&lt;&nbsp;2 seg</div>
+      <div class="stat-label">Ciclo completo de inspección por pieza</div>
+    </div>
+    <div class="stat fade-in">
+      <div class="stat-num">±0.02 mm</div>
+      <div class="stat-label">Precisión de medición de diámetros</div>
+    </div>
+    <div class="stat fade-in">
+      <div class="stat-num">100%</div>
+      <div class="stat-label">Piezas inspeccionadas — sin muestreo</div>
+    </div>
+    <div class="stat fade-in">
+      <div class="stat-num">97% más barato</div>
+      <div class="stat-label">Frente a una CMM industrial</div>
+    </div>
+  </div>
+</div>
+
+<!-- SISTEMA -->
+<section id="sistema" class="section-full">
+  <div class="section-tag-line">El sistema</div>
+  <h2>Tres tecnologías de medición integradas</h2>
+  <p class="section-sub">
+    DIMENSIA combina sensores láser ToF, calibres digitales de precisión y lectura
+    automática por código QR en una estación compacta con protección industrial IP65.
+  </p>
+  <div class="features">
+    <div class="feat fade-in">
+      <div class="feat-icon">
+        <svg viewBox="0 0 20 20" fill="none" stroke="#1A6BFF" stroke-width="1.5" stroke-linecap="round">
+          <circle cx="10" cy="10" r="8"/><line x1="10" y1="5" x2="10" y2="10"/><line x1="10" y1="10" x2="14" y2="10"/>
+        </svg>
+      </div>
+      <h3>Sensor láser VL53L4CD</h3>
+      <p>Mide largo y alto de la pieza con tecnología LiDAR de corto rango. 100 lecturas por segundo. Precisión ±1mm. Insensible al color y material de la pieza.</p>
+    </div>
+    <div class="feat fade-in">
+      <div class="feat-icon">
+        <svg viewBox="0 0 20 20" fill="none" stroke="#1A6BFF" stroke-width="1.5" stroke-linecap="round">
+          <rect x="2" y="7" width="16" height="6" rx="2"/><line x1="2" y1="10" x2="0" y2="10"/><line x1="18" y1="10" x2="20" y2="10"/>
+        </svg>
+      </div>
+      <h3>Calibre digital de precisión</h3>
+      <p>Mide diámetro exterior e interior simultáneamente. Resolución 0.01mm. Precisión ±0.02mm. Transmisión automática — sin lectura manual.</p>
+    </div>
+    <div class="feat fade-in">
+      <div class="feat-icon">
+        <svg viewBox="0 0 20 20" fill="none" stroke="#1A6BFF" stroke-width="1.5">
+          <rect x="2" y="2" width="7" height="7" rx="1"/><rect x="11" y="2" width="7" height="7" rx="1"/>
+          <rect x="2" y="11" width="7" height="7" rx="1"/><rect x="13" y="13" width="3" height="3" rx="0.5" fill="#1A6BFF" stroke="none"/>
+        </svg>
+      </div>
+      <h3>Identificación por código QR</h3>
+      <p>El operario escanea el QR de la pieza y el sistema carga automáticamente los valores de referencia. Sin selección manual, sin errores de configuración.</p>
+    </div>
+    <div class="feat fade-in">
+      <div class="feat-icon">
+        <svg viewBox="0 0 20 20" fill="none" stroke="#1A6BFF" stroke-width="1.5" stroke-linecap="round">
+          <rect x="2" y="3" width="16" height="14" rx="2"/><line x1="6" y1="10" x2="14" y2="10"/><line x1="10" y1="6" x2="10" y2="14"/>
+        </svg>
+      </div>
+      <h3>Pantalla táctil integrada</h3>
+      <p>Pantalla de 7 pulgadas en la estación de medición. Muestra resultado, mediciones exactas y contador del turno sin necesidad de PC ni celular adicional.</p>
+    </div>
+    <div class="feat fade-in">
+      <div class="feat-icon">
+        <svg viewBox="0 0 20 20" fill="none" stroke="#1A6BFF" stroke-width="1.5" stroke-linecap="round">
+          <path d="M10 2L18 7V13L10 18L2 13V7L10 2Z"/>
+          <line x1="10" y1="10" x2="18" y2="7" stroke-dasharray="2 1.5"/>
+          <line x1="10" y1="10" x2="2" y2="7" stroke-dasharray="2 1.5"/>
+          <line x1="10" y1="10" x2="10" y2="18" stroke-dasharray="2 1.5"/>
+        </svg>
+      </div>
+      <h3>Plataforma web de trazabilidad</h3>
+      <p>Registro automático de cada inspección. Historial completo, alertas en tiempo real y exportación de reportes para auditorías ASME B16.11 y DIN 2999.</p>
+    </div>
+    <div class="feat fade-in">
+      <div class="feat-icon">
+        <svg viewBox="0 0 20 20" fill="none" stroke="#1A6BFF" stroke-width="1.5" stroke-linecap="round">
+          <path d="M10 2L18 5V10C18 14 14 17.5 10 18C6 17.5 2 14 2 10V5L10 2Z"/>
+        </svg>
+      </div>
+      <h3>Protección industrial IP65</h3>
+      <p>Caja resistente a polvo, viruta metálica y aceite de corte. UPS integrado para cortes de luz. Diseñado para funcionar en un ambiente de tornería real.</p>
+    </div>
+  </div>
+</section>
+
+<!-- SPECS -->
+<section id="specs" class="section-full">
+  <div class="section-tag-line">Especificaciones técnicas</div>
+  <h2>Datos del sistema</h2>
+  <p class="section-sub">DIMENSIA v1.0 — Sistema de inspección dimensional automatizada para accesorios de cañerías.</p>
+  <div class="specs-wrap fade-in">
+    <table>
+      <tr><td>Rango de medición — largo/alto</td><td>1 mm a 1.300 mm</td></tr>
+      <tr><td>Precisión — largo/alto</td><td>±1 mm (sensor VL53L4CD, tecnología LiDAR)</td></tr>
+      <tr><td>Rango de medición — diámetros</td><td>0 mm a 150 mm</td></tr>
+      <tr><td>Precisión — diámetros OD/ID</td><td>±0.02 mm (calibre digital ACCUD DIN 862)</td></tr>
+      <tr><td>Tiempo de ciclo por pieza</td><td>Menos de 2 segundos</td></tr>
+      <tr><td>Capacidad de inspección</td><td>Hasta 300 piezas por hora</td></tr>
+      <tr><td>Normas soportadas</td><td>ASME B16.11 / DIN 2999</td></tr>
+      <tr><td>Identificación de piezas</td><td>Código QR — generación automática desde plataforma web</td></tr>
+      <tr><td>Interfaz de usuario</td><td>Pantalla táctil 7" HDMI integrada en la estación</td></tr>
+      <tr><td>Microcontrolador de sensores</td><td>ESP32 (dual-core 240 MHz)</td></tr>
+      <tr><td>Procesamiento central</td><td>Raspberry Pi 4 Model B — 4GB RAM</td></tr>
+      <tr><td>Conectividad</td><td>WiFi — sincronización en tiempo real con plataforma web</td></tr>
+      <tr><td>Protección</td><td>IP65 — polvo, agua y aceite de corte</td></tr>
+      <tr><td>Alimentación</td><td>220V CA con UPS integrado ante cortes de luz</td></tr>
+      <tr><td>Exportación de datos</td><td>PDF / CSV para auditorías normativas</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- SECTORES -->
+<section id="sectores" class="section-full">
+  <div class="section-tag-line">Sectores de aplicación</div>
+  <h2>Industrias donde DIMENSIA agrega valor</h2>
+  <p class="section-sub">Cualquier industria que fabrique accesorios roscados o de unión para cañerías puede beneficiarse del control de calidad automático.</p>
+  <div class="sectors">
+    <div class="sector fade-in"><div class="sector-dot"></div><div><h4>Petróleo y gas</h4><p>Niples, uniones y bridas para alta presión</p></div></div>
+    <div class="sector fade-in"><div class="sector-dot"></div><div><h4>Industria química</h4><p>Accesorios para fluidos corrosivos y peligrosos</p></div></div>
+    <div class="sector fade-in"><div class="sector-dot"></div><div><h4>Agua y saneamiento</h4><p>Conexiones para sistemas hidráulicos urbanos</p></div></div>
+    <div class="sector fade-in"><div class="sector-dot"></div><div><h4>Aeronáutica</h4><p>Piezas de alta precisión con trazabilidad normativa</p></div></div>
+    <div class="sector fade-in"><div class="sector-dot"></div><div><h4>Industria alimentaria</h4><p>Cañerías sanitarias con certificación</p></div></div>
+    <div class="sector fade-in"><div class="sector-dot"></div><div><h4>Tornerías PyME</h4><p>Control de calidad accesible para producción en serie</p></div></div>
+  </div>
+</section>
+
+<!-- CONTACTO -->
+<div style="max-width:1160px;margin:0 auto;padding:0 40px 80px" id="contacto">
+  <div class="cta-wrap fade-in">
+    <div>
+      <div class="cta-title">Solicitá una demo<br>o presupuesto</div>
+      <p class="cta-sub">Contanos qué tipo de piezas fabricás y el volumen de producción. En 48 horas te enviamos una propuesta adaptada a tu tornería.</p>
+      <div class="cta-meta">
+        Proyecto escolar — Escuela de Educación Técnica N°7<br>
+        Taller Regional Quilmes — Especialidad Aviónica<br>
+        IMPA TRQ — github.com/impatrq/DIMENSION
+      </div>
+    </div>
+    <div class="form-card">
+      <div class="form-title">Consulta</div>
+      <div class="field">
+        <label>Nombre y empresa</label>
+        <input type="text" placeholder="Ej: Juan Pérez — Tornería XYZ">
+      </div>
+      <div class="field">
+        <label>Correo electrónico</label>
+        <input type="email" placeholder="ejemplo@empresa.com">
+      </div>
+      <div class="field">
+        <label>Tipo de piezas que fabrica</label>
+        <select>
+          <option>Niples y uniones NPT</option>
+          <option>Bridas industriales</option>
+          <option>Codos y reducciones</option>
+          <option>Otro tipo de accesorio</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Consulta o comentario</label>
+        <textarea placeholder="Contanos sobre tu producción..."></textarea>
+      </div>
+      <button class="form-submit" onclick="this.textContent='Enviado ✓';this.style.background='#16A34A'">
+        Enviar consulta
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">DIMEN<span>SIA</span></div>
+  <p>EET N°7 · Taller Regional Quilmes · Especialidad Aviónica · 2025</p>
+</footer>
+
+<script>
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if(e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
