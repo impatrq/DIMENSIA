@@ -1,15 +1,10 @@
 // ── NAVEGACIÓN ──────────────────────────────────────────────
 function showPage(id, el) {
-  // Ocultar todas las páginas
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  // Desactivar todos los nav items
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  // Mostrar la página seleccionada
   const page = document.getElementById('page-' + id);
   if (page) page.classList.add('active');
-  // Activar el nav item
   if (el) el.classList.add('active');
-  // Actualizar el título
   const titles = {
     dashboard:  'Dashboard',
     inspeccion: 'Inspección en vivo',
@@ -26,51 +21,84 @@ function toggleForm() {
   form.style.display = form.style.display === 'none' ? 'block' : 'none';
 }
 
-// ── FECHA Y HORA EN TOPBAR ───────────────────────────────────
+// ── FECHA Y HORA ─────────────────────────────────────────────
 function updateDate() {
   const now = new Date();
-  const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-  const fecha = now.toLocaleDateString('es-AR', opciones);
-  const hora  = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  const fecha = now.toLocaleDateString('es-AR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  const hora  = now.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
   const el = document.getElementById('page-date');
   if (el) el.textContent = `${fecha} — ${hora}`;
 }
 updateDate();
 setInterval(updateDate, 60000);
 
-// ── SIMULACIÓN DE DATOS EN VIVO (solo para demo) ─────────────
-const piezas = [
-  { nombre: 'Niple NPT 1/2"', od: 21.34, id: 14.02, ok: true },
-  { nombre: 'Union NPT 3/4"', od: 26.71, id: 18.01, ok: true },
-  { nombre: 'Brida DN25',     od: 26.10, id: null,  ok: false },
-  { nombre: 'Codo 90° 1/2"', od: 21.35, id: null,  ok: true },
-];
+// ── BACKEND URL ──────────────────────────────────────────────
+const API = 'http://localhost:5000';
 
-let contador = 247;
+// ── CARGAR INSPECCIONES DESDE EL BACKEND ────────────────────
+async function cargarInspecciones() {
+  try {
+    const res = await fetch(`${API}/inspecciones`);
+    const data = await res.json();
+    const tabla = document.getElementById('live-table');
+    if (!tabla) return;
 
-function agregarFilaTabla() {
-  const p = piezas[Math.floor(Math.random() * piezas.length)];
-  const tabla = document.getElementById('live-table');
-  if (!tabla) return;
+    if (data.length === 0) {
+      tabla.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
+      return;
+    }
 
-  contador++;
-  const fila = document.createElement('tr');
-  fila.innerHTML = `
-    <td>${p.nombre}</td>
-    <td class="mono">${p.od.toFixed(2)}</td>
-    <td class="mono">${p.id ? p.id.toFixed(2) : '—'}</td>
-    <td><span class="pill ${p.ok ? 'ok' : 'fail'}">${p.ok ? 'Aprobada' : 'Rechazada'}</span></td>
-  `;
-  fila.style.opacity = '0';
-  fila.style.transition = 'opacity 0.3s';
-  tabla.insertBefore(fila, tabla.firstChild);
-  setTimeout(() => fila.style.opacity = '1', 10);
+    tabla.innerHTML = '';
+    data.slice(0, 5).forEach(insp => {
+      const fila = document.createElement('tr');
+      fila.innerHTML = `
+        <td>${insp.pieza}</td>
+        <td class="mono">${insp.od ? insp.od.toFixed(2) : '—'}</td>
+        <td class="mono">${insp.id_med ? insp.id_med.toFixed(2) : '—'}</td>
+        <td><span class="pill ${insp.resultado === 'APROBADA' ? 'ok' : 'fail'}">${insp.resultado}</span></td>
+      `;
+      tabla.appendChild(fila);
+    });
 
-  // Mantener solo 5 filas
-  while (tabla.rows.length > 5) {
-    tabla.deleteRow(tabla.rows.length - 1);
+    // Actualizar métricas
+    const total = data.length;
+    const aprobadas = data.filter(i => i.resultado === 'APROBADA').length;
+    const rechazadas = total - aprobadas;
+    document.querySelector('.metric-value.blue').textContent = total;
+    document.querySelector('.metric-value.green').textContent = aprobadas;
+    document.querySelector('.metric-value.red').textContent = rechazadas;
+
+  } catch (err) {
+    console.log('Backend no disponible, mostrando datos de ejemplo');
   }
 }
 
-// Agregar una nueva fila cada 4 segundos (simulación)
-setInterval(agregarFilaTabla, 4000);
+// ── CARGAR PIEZAS DESDE EL BACKEND ──────────────────────────
+async function cargarPiezas() {
+  try {
+    const res = await fetch(`${API}/piezas`);
+    const data = await res.json();
+    const tbody = document.querySelector('#page-piezas .data-table tbody');
+    if (!tbody || data.length === 0) return;
+
+    tbody.innerHTML = '';
+    data.forEach(pieza => {
+      const fila = document.createElement('tr');
+      fila.innerHTML = `
+        <td>${pieza.nombre}</td>
+        <td class="mono">${pieza.norma || '—'}</td>
+        <td class="mono">${pieza.od_ref ? pieza.od_ref + ' mm' : '—'}</td>
+        <td class="mono">${pieza.id_ref ? pieza.id_ref + ' mm' : '—'}</td>
+        <td><span class="pill pend" style="cursor:pointer">editar</span></td>
+      `;
+      tbody.appendChild(fila);
+    });
+  } catch (err) {
+    console.log('No se pudieron cargar las piezas');
+  }
+}
+
+// ── INICIAR ──────────────────────────────────────────────────
+cargarInspecciones();
+cargarPiezas();
+setInterval(cargarInspecciones, 5000);
