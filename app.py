@@ -1,7 +1,9 @@
 from flask import Flask, jsonify, request
-from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas
+from flask_cors import CORS
+from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas, guardar_pieza
 
-app = Flask(__name__)
+app = Flask(__name__) 
+CORS(app)
 
 # Inicializar base de datos al arrancar
 init_db()
@@ -25,6 +27,13 @@ def nueva_inspeccion():
 def get_inspecciones():
     inspecciones = obtener_inspecciones()
     return jsonify(inspecciones)
+
+# Guardar una nueva pieza
+@app.route('/piezas', methods=['POST'])
+def nueva_pieza():
+    datos = request.get_json()
+    guardar_pieza(datos)
+    return jsonify({'estado': 'ok', 'mensaje': 'Pieza guardada'})
 
 # Obtener tipos de piezas registradas
 @app.route('/piezas', methods=['GET'])
