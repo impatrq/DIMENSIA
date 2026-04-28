@@ -101,4 +101,30 @@ async function cargarPiezas() {
 // ── INICIAR ──────────────────────────────────────────────────
 cargarInspecciones();
 cargarPiezas();
-setInterval(cargarInspecciones, 5000);
+setInterval(cargarInspecciones, 5000)      
+// ── GUARDAR PIEZA ──────────────────────────────────────
+async function guardarPieza() {
+  const datos = {
+    nombre:    document.getElementById('pieza-nombre').value,
+    norma:     document.getElementById('pieza-norma').value,
+    od_ref:    parseFloat(document.getElementById('pieza-od-ref').value),
+    od_tol:    parseFloat(document.getElementById('pieza-od-tol').value),
+    id_ref:    parseFloat(document.getElementById('pieza-id-ref').value),
+    id_tol:    parseFloat(document.getElementById('pieza-id-tol').value),
+    largo_ref: parseFloat(document.getElementById('pieza-largo-ref').value),
+    largo_tol: parseFloat(document.getElementById('pieza-largo-tol').value),
+  };
+
+  const respuesta = await fetch('http://127.0.0.1:5000/piezas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(datos)
+  });
+
+  if (respuesta.ok) {
+    alert('✅ Pieza guardada correctamente');
+    toggleForm();
+  } else {
+    alert('❌ Error al guardar la pieza');
+  }
+}
