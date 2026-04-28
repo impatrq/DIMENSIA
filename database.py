@@ -76,6 +76,26 @@ def obtener_inspecciones():
     conn.close()
     return filas
 
+# ── GUARDAR PIEZA ────────────────────────────────────
+def guardar_pieza(datos):
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO piezas (nombre, norma, od_ref, od_tol, id_ref, id_tol, largo_ref, largo_tol)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        datos.get('nombre'),
+        datos.get('norma'),
+        datos.get('od_ref'),
+        datos.get('od_tol'),
+        datos.get('id_ref'),
+        datos.get('id_tol'),
+        datos.get('largo_ref'),
+        datos.get('largo_tol')
+    ))
+    conn.commit()
+    conn.close()
+
 # ── OBTENER PIEZAS ───────────────────────────────────
 def obtener_piezas():
     conn = sqlite3.connect(DB)
@@ -84,4 +104,4 @@ def obtener_piezas():
     c.execute('SELECT * FROM piezas ORDER BY nombre')
     filas = [dict(f) for f in c.fetchall()]
     conn.close()
-    return filas
+    return filas 
