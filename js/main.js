@@ -122,9 +122,26 @@ async function guardarPieza() {
   });
 
   if (respuesta.ok) {
-    alert('✅ Pieza guardada correctamente');
-    toggleForm();
+    const resultado = await respuesta.json();
+    const idPieza = resultado.id;
+    generarQR(datos.nombre, datos.norma, idPieza);
+    setTimeout(() => {
+      alert('✅ Pieza guardada correctamente');
+      toggleForm();
+    }, 500);
   } else {
     alert('❌ Error al guardar la pieza');
   }
+}
+
+// ── GENERAR QR ──────────────────────────────────────────
+function generarQR(nombre, norma, id) {
+  const contenedor = document.getElementById('qr-canvas');
+  contenedor.innerHTML = '';
+  const texto = `DIMENSIA|${id}|${nombre}|${norma}`;
+  new QRCode(contenedor, {
+    text: texto,
+    width: 80,
+    height: 80,
+  });
 }
