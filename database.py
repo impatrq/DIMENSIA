@@ -94,7 +94,9 @@ def guardar_pieza(datos):
         datos.get('largo_tol')
     ))
     conn.commit()
+    ultimo_id = c.lastrowid
     conn.close()
+    return ultimo_id
 
 # ── OBTENER PIEZAS ───────────────────────────────────
 def obtener_piezas():
