@@ -158,5 +158,8 @@ function iniciarSesion() {
   }
 
   operarioActual = { nombre, legajo };
+  const badge = document.getElementById('operario-badge');
+  badge.textContent = `👤 ${nombre} — Legajo ${legajo}`;
+  badge.style.display = 'block';
   document.getElementById('login-screen').style.display = 'none';
-}
+} 
