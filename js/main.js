@@ -144,4 +144,19 @@ function generarQR(nombre, norma, id) {
     width: 80,
     height: 80,
   });
+ }
+// ── LOGIN DE OPERARIOS ──────────────────────────────────
+let operarioActual = null;
+
+function iniciarSesion() {
+  const nombre = document.getElementById('login-nombre').value.trim();
+  const legajo = document.getElementById('login-legajo').value.trim();
+
+  if (!nombre || !legajo) {
+    alert('⚠️ Completá tu nombre y legajo para continuar');
+    return;
+  }
+
+  operarioActual = { nombre, legajo };
+  document.getElementById('login-screen').style.display = 'none';
 }
