@@ -11,6 +11,22 @@
 <body>
 
 <div class="app">
+  <!-- PANTALLA DE LOGIN -->
+<div id="login-screen" style="position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999">
+  <div class="card" style="width:360px;text-align:center">
+    <div class="logo-name" style="font-size:24px;margin-bottom:4px">DIMENSIA</div>
+    <div class="logo-sub" style="margin-bottom:24px">Panel de control</div>
+    <div class="form-group" style="text-align:left">
+      <label>Nombre del operario</label>
+      <input id="login-nombre" type="text" placeholder="Ej: Juan Pérez">
+    </div>
+    <div class="form-group" style="text-align:left">
+      <label>Legajo</label>
+      <input id="login-legajo" type="text" placeholder="Ej: 1042">
+    </div>
+    <button class="btn-primary" style="width:100%;margin-top:8px" onclick="iniciarSesion()">Ingresar al sistema</button>
+  </div>
+</div>
 
   <!-- SIDEBAR -->
   <aside class="sidebar">
@@ -256,55 +272,60 @@
             </table>
           </div>
 
+          <!-- FORMULARIO NUEVA PIEZA — con IDs corregidos -->
           <div class="card" id="form-card" style="display:none">
             <div class="card-title">Nueva pieza</div>
-            <div class="form-group"><label>Nombre de la pieza</label><input type="text" placeholder="Ej: Niple NPT 1/2&quot;"></div>
-            <div class="form-group"><label>Norma aplicable</label>
-              <select><option>ASME B16.11</option><option>DIN 2999</option><option>Otra</option></select>
+            <div class="form-group">
+              <label>Nombre de la pieza</label>
+              <input id="pieza-nombre" type="text" placeholder="Ej: Niple NPT 1/2&quot;">
+            </div>
+            <div class="form-group">
+              <label>Norma aplicable</label>
+              <select id="pieza-norma">
+                <option>ASME B16.11</option>
+                <option>DIN 2999</option>
+                <option>Otra</option>
+              </select>
             </div>
             <div class="form-row">
-              <div class="form-group"><label>OD referencia (mm)</label><input type="number" placeholder="21.30"></div>
-              <div class="form-group"><label>Tolerancia OD</label><input type="number" placeholder="0.50"></div>
+              <div class="form-group">
+                <label>OD referencia (mm)</label>
+                <input id="pieza-od-ref" type="number" placeholder="21.30">
+              </div>
+              <div class="form-group">
+                <label>Tolerancia OD</label>
+                <input id="pieza-od-tol" type="number" placeholder="0.50">
+              </div>
             </div>
             <div class="form-row">
-              <div class="form-group"><label>ID referencia (mm)</label><input type="number" placeholder="14.00"></div>
-              <div class="form-group"><label>Tolerancia ID</label><input type="number" placeholder="0.50"></div>
+              <div class="form-group">
+                <label>ID referencia (mm)</label>
+                <input id="pieza-id-ref" type="number" placeholder="14.00">
+              </div>
+              <div class="form-group">
+                <label>Tolerancia ID</label>
+                <input id="pieza-id-tol" type="number" placeholder="0.50">
+              </div>
             </div>
             <div class="form-row">
-              <div class="form-group"><label>Largo referencia (mm)</label><input type="number" placeholder="58.00"></div>
-              <div class="form-group"><label>Tolerancia largo</label><input type="number" placeholder="1.00"></div>
+              <div class="form-group">
+                <label>Largo referencia (mm)</label>
+                <input id="pieza-largo-ref" type="number" placeholder="58.00">
+              </div>
+              <div class="form-group">
+                <label>Tolerancia largo</label>
+                <input id="pieza-largo-tol" type="number" placeholder="1.00">
+              </div>
             </div>
-            <div class="qr-preview">
-              <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-                <rect x="2" y="2" width="16" height="16" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                <rect x="5" y="5" width="10" height="10" rx="0.5" fill="currentColor"/>
-                <rect x="42" y="2" width="16" height="16" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                <rect x="45" y="5" width="10" height="10" rx="0.5" fill="currentColor"/>
-                <rect x="2" y="42" width="16" height="16" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                <rect x="5" y="45" width="10" height="10" rx="0.5" fill="currentColor"/>
-                <rect x="24" y="4" width="3" height="3" fill="currentColor"/>
-                <rect x="30" y="4" width="3" height="3" fill="currentColor"/>
-                <rect x="24" y="10" width="3" height="3" fill="currentColor"/>
-                <rect x="4" y="24" width="3" height="3" fill="currentColor"/>
-                <rect x="10" y="24" width="3" height="3" fill="currentColor"/>
-                <rect x="24" y="24" width="3" height="3" fill="currentColor"/>
-                <rect x="30" y="24" width="3" height="3" fill="currentColor"/>
-                <rect x="36" y="24" width="3" height="3" fill="currentColor"/>
-                <rect x="42" y="24" width="3" height="3" fill="currentColor"/>
-                <rect x="48" y="24" width="3" height="3" fill="currentColor"/>
-                <rect x="24" y="42" width="3" height="3" fill="currentColor"/>
-                <rect x="30" y="48" width="3" height="3" fill="currentColor"/>
-                <rect x="36" y="42" width="3" height="3" fill="currentColor"/>
-                <rect x="42" y="48" width="3" height="3" fill="currentColor"/>
-                <rect x="48" y="42" width="3" height="3" fill="currentColor"/>
-              </svg>
+           <div class="qr-preview">
+              <div id="qr-canvas"></div>
               <div>
-                <div class="qr-id mono">ID: NIPLE-NPT-12</div>
+                <div class="qr-id mono" id="qr-id-texto">El QR aparecerá al guardar</div>
                 <div class="qr-hint">El QR se genera automáticamente al guardar</div>
               </div>
             </div>
             <div class="form-actions">
-              <button class="btn-primary">Guardar pieza</button>
+              <button class="btn-primary" onclick="guardarPieza()">Guardar pieza</button>
               <button class="btn-ghost" onclick="toggleForm()">Cancelar</button>
             </div>
           </div>
@@ -414,7 +435,7 @@
     </div>
   </main>
 </div>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
