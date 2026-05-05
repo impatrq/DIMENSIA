@@ -1,28 +1,19 @@
 # Programa principal — ESP32
-# Paso 4: leer sensores, evaluar tolerancias y enviar resultado por Serial JSON
+# Lee los 3 sensores y manda las mediciones por Serial a la Raspberry Pi
+# La lógica de tolerancias y el resultado (APROBADA/RECHAZADA) los decide la Raspberry Pi
 # MicroPython
 
 from machine import I2C, Pin
 from time import sleep_ms
 from multiplexor import Multiplexor
 from vl53l4cd import VL53L4CD
-from logica import LogicaInspeccion
 from comunicacion import Comunicacion
 
 # ─── Inicialización del hardware ──────────────────────────────────────────────
 
 i2c = I2C(0, sda=Pin(21), scl=Pin(22), freq=400_000)
 mux = Multiplexor(i2c)
-sensores = [VL53L4CD(i2c) for _ in range(4)]
-
-# ─── Valores de referencia y tolerancias (en mm) ─────────────────────────────
-
-logica = LogicaInspeccion({
-    "s0": {"referencia": 150, "tolerancia": 2},
-    "s1": {"referencia": 200, "tolerancia": 2},
-    "s2": {"referencia": 100, "tolerancia": 2},
-    "s3": {"referencia": 300, "tolerancia": 2},
-})
+sensores = [VL53L4CD(i2c) for _ in range(3)]
 
 comunicacion = Comunicacion()
 
@@ -30,7 +21,7 @@ comunicacion = Comunicacion()
 
 print("Inicializando sensores...")
 
-for canal in range(4):
+for canal in range(3):
     mux.seleccionar_canal(canal)
     sensores[canal].inicializar()
     mux.desactivar_todos()
@@ -40,22 +31,14 @@ print("Sensores listos. Enviando datos...")
 # ─── Loop principal ───────────────────────────────────────────────────────────
 
 while True:
-    # Leer los 4 sensores de a uno
+    # Leer los 3 sensores de a uno, activando y desactivando el canal cada vez
     mediciones = {}
-    for canal in range(4):
+    for canal in range(3):
         mux.seleccionar_canal(canal)
         mediciones["s{}".format(canal)] = sensores[canal].leer_distancia()
         mux.desactivar_todos()
 
-    # Evaluar tolerancias
-    resultado = logica.evaluar(mediciones)
-
-    # Enviar JSON por Serial a la Raspberry Pi
-    comunicacion.enviar_resultado(resultado)
-
-    # Solo imprimir en consola si hay un rechazo, para facilitar el debug
-    if not resultado.aprobada:
-        fallidos = [s for s, d in resultado.detalles.items() if not d["ok"]]
-        print("RECHAZADA: {}".format(", ".join(fallidos)))
+    # Enviar las mediciones crudas por Serial — la Raspberry Pi decide el resultado
+    comunicacion.enviar_mediciones(mediciones)
 
     sleep_ms(500)
