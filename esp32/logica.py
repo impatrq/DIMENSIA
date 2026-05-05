@@ -1,3 +1,6 @@
+# Este módulo quedó en desuso. La lógica de tolerancias
+# se movió a la Raspberry Pi para aprovechar la base de datos.
+
 # Lógica de inspección dimensional
 # Compara las mediciones de los 4 sensores contra referencias y tolerancias
 # y decide si la pieza es APROBADA o RECHAZADA
