@@ -351,13 +351,12 @@
         <div class="card" style="margin-top:16px">
           <div class="card-header">
             <div class="card-title">247 inspecciones encontradas</div>
-            <button class="btn-ghost">Exportar CSV</button>
-          </div>
+            <a onclick="exportarCSV()" class="btn-ghost" style="cursor:pointer">Exportar CSV</a>
           <table class="data-table">
             <thead>
               <tr><th>#</th><th>Pieza</th><th>Largo (mm)</th><th>OD (mm)</th><th>ID (mm)</th><th>Estado</th><th>Fecha y hora</th></tr>
             </thead>
-            <tbody>
+            <tbody id="historial-table"></tbody>
               <tr><td class="mono gray">#247</td><td>Niple NPT 1/2"</td><td class="mono">58.2</td><td class="mono">21.34</td><td class="mono">14.02</td><td><span class="pill ok">Aprobada</span></td><td class="gray small">Hoy 14:32</td></tr>
               <tr><td class="mono gray">#246</td><td>Brida DN25</td><td class="mono">42.1</td><td class="mono">25.84</td><td class="mono">—</td><td><span class="pill fail">Rechazada</span></td><td class="gray small">Hoy 14:31</td></tr>
               <tr><td class="mono gray">#245</td><td>Union NPT 3/4"</td><td class="mono">65.0</td><td class="mono">26.71</td><td class="mono">18.01</td><td><span class="pill ok">Aprobada</span></td><td class="gray small">Hoy 14:29</td></tr>
