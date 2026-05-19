@@ -63,6 +63,19 @@ def leer_qr_loop(db):
             ))
 
 
+def obtener_operario():
+    """
+    Consulta al backend cuál es el operario que inició sesión.
+    Si el backend no responde o hay cualquier error, devuelve un valor por defecto
+    para no interrumpir el loop principal bajo ninguna circunstancia.
+    """
+    try:
+        respuesta = requests.get("http://localhost:5000/operario_activo", timeout=2)
+        return respuesta.json()
+    except Exception:
+        return {"operario": "Sin identificar", "legajo": ""}
+
+
 def evaluar_mediciones(mediciones, pieza):
     """
     Compara las mediciones de los 3 sensores contra las referencias
@@ -121,12 +134,17 @@ def main():
 
             resultado = evaluar_mediciones(mediciones, pieza_actual)
 
+            # Obtener el operario activo desde el backend
+            operario_data = obtener_operario()
+
             payload = {
                 "pieza":     pieza_actual["nombre"],
                 "largo":     mediciones["s0"],
                 "od":        mediciones["s1"],
                 "id":        mediciones["s2"],
                 "resultado": resultado,
+                "operario":  operario_data["operario"],
+                "legajo":    operario_data["legajo"],
             }
 
             try:
@@ -135,12 +153,12 @@ def main():
                 print("Error al enviar al backend: {}".format(e))
                 continue
 
-            print("Enviado: {} | largo:{}mm od:{}mm id:{}mm | {}".format(
-                pieza_actual["nombre"],
+            print("Enviado: {} | largo:{}mm od:{}mm id:{}mm | operario: {}".format(
+                resultado,
                 mediciones["s0"],
                 mediciones["s1"],
                 mediciones["s2"],
-                resultado,
+                operario_data["operario"],
             ))
 
     except KeyboardInterrupt:
