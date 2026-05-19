@@ -173,3 +173,23 @@ function iniciarSesion() {
   badge.style.display = 'block';
   document.getElementById('login-screen').style.display = 'none';
 }
+// ── EXPORTAR CSV ──────────────────────────────────────
+function exportarCSV() {
+  const encabezado = ['#', 'Pieza', 'Largo (mm)', 'OD (mm)', 'ID (mm)', 'Estado', 'Fecha y Hora'];
+  const datos = [
+    ['247', 'Niple NPT 1/2"', '58.2', '21.34', '14.02', 'Aprobada', 'Hoy 14:32'],
+    ['246', 'Brida DN25', '42.1', '25.84', '—', 'Rechazada', 'Hoy 14:31'],
+    ['245', 'Union NPT 3/4"', '65.0', '26.71', '18.01', 'Aprobada', 'Hoy 14:29'],
+    ['244', 'Niple NPT 1/2"', '57.9', '21.31', '14.00', 'Aprobada', 'Hoy 14:28'],
+    ['243', 'Codo 90° 1/2"', '38.5', '21.35', '—', 'Aprobada', 'Hoy 14:26'],
+    ['242', 'Brida DN25', '41.9', '26.10', '—', 'Rechazada', 'Hoy 14:24'],
+  ];
+
+  const csv = [encabezado, ...datos].map(f => f.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'inspecciones_dimensia.csv';
+  a.click();
+}
