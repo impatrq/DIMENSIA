@@ -32,14 +32,30 @@ def get_inspecciones():
 @app.route('/piezas', methods=['POST'])
 def nueva_pieza():
     datos = request.get_json()
-    guardar_pieza(datos)
-    return jsonify({'estado': 'ok', 'mensaje': 'Pieza guardada'})
+    id_pieza = guardar_pieza(datos)
+    return jsonify({'estado': 'ok', 'mensaje': 'Pieza guardada', 'id': id_pieza})
 
 # Obtener tipos de piezas registradas
 @app.route('/piezas', methods=['GET'])
 def get_piezas():
     piezas = obtener_piezas()
     return jsonify(piezas)
+
+# Operario activo en memoria
+operario_activo = {'operario': None, 'legajo': None}
+
+# Guardar operario activo
+@app.route('/operario_activo', methods=['POST'])
+def set_operario():
+    datos = request.get_json()
+    operario_activo['operario'] = datos.get('operario')
+    operario_activo['legajo'] = datos.get('legajo')
+    return jsonify({'estado': 'ok'})
+
+# Obtener operario activo
+@app.route('/operario_activo', methods=['GET'])
+def get_operario():
+    return jsonify(operario_activo)
 
 # ── ARRANCAR SERVIDOR ────────────────────────────────
 if __name__ == '__main__':
