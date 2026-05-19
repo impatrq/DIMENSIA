@@ -101,7 +101,8 @@ async function cargarPiezas() {
 // ── INICIAR ──────────────────────────────────────────────────
 cargarInspecciones();
 cargarPiezas();
-setInterval(cargarInspecciones, 5000)      
+setInterval(cargarInspecciones, 5000);
+
 // ── GUARDAR PIEZA ──────────────────────────────────────
 async function guardarPieza() {
   const datos = {
@@ -144,7 +145,8 @@ function generarQR(nombre, norma, id) {
     width: 80,
     height: 80,
   });
- }
+}
+
 // ── LOGIN DE OPERARIOS ──────────────────────────────────
 let operarioActual = null;
 
@@ -158,8 +160,16 @@ function iniciarSesion() {
   }
 
   operarioActual = { nombre, legajo };
+
+  // Avisar al backend quién está de turno
+  fetch('http://127.0.0.1:5000/operario_activo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ operario: nombre, legajo: legajo })
+  });
+
   const badge = document.getElementById('operario-badge');
   badge.textContent = `👤 ${nombre} — Legajo ${legajo}`;
   badge.style.display = 'block';
   document.getElementById('login-screen').style.display = 'none';
-} 
+}
