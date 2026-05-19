@@ -31,7 +31,9 @@ def init_db():
             od REAL,
             id_med REAL,
             resultado TEXT,
-            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            operario TEXT,
+            legajo TEXT
         )
     ''')
 
@@ -54,14 +56,16 @@ def guardar_inspeccion(datos):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute('''
-        INSERT INTO inspecciones (pieza, largo, od, id_med, resultado)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO inspecciones (pieza, largo, od, id_med, resultado, operario, legajo)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (
         datos.get('pieza'),
         datos.get('largo'),
         datos.get('od'),
         datos.get('id'),
-        datos.get('resultado')
+        datos.get('resultado'),
+        datos.get('operario'),
+        datos.get('legajo')
     ))
     conn.commit()
     conn.close()
@@ -106,4 +110,4 @@ def obtener_piezas():
     c.execute('SELECT * FROM piezas ORDER BY nombre')
     filas = [dict(f) for f in c.fetchall()]
     conn.close()
-    return filas 
+    return filas
