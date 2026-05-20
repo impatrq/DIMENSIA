@@ -250,6 +250,93 @@
             </div>
           </div>
         </div>
+
+        <!-- ── PANEL MONITOREO 5 SENSORES ── -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-header">
+            <div class="card-title">Lecturas brutas — 5 sensores</div>
+            <span class="card-sub live-dot-wrap"><span class="live-dot"></span> En vivo</span>
+          </div>
+          <div class="live-rows">
+            <div class="live-row">
+              <span class="live-label">S1 — Alto (superior)</span>
+              <span class="live-val mono" id="sensor-s1">— mm</span>
+            </div>
+            <div class="live-row">
+              <span class="live-label">S2 — Lateral izquierdo</span>
+              <span class="live-val mono" id="sensor-s2">— mm</span>
+            </div>
+            <div class="live-row">
+              <span class="live-label">S2' — Lateral derecho</span>
+              <span class="live-val mono" id="sensor-s2p">— mm</span>
+            </div>
+            <div class="live-row">
+              <span class="live-label">S3 — Frontal</span>
+              <span class="live-val mono" id="sensor-s3">— mm</span>
+            </div>
+            <div class="live-row">
+              <span class="live-label">S3' — Posterior</span>
+              <span class="live-val mono" id="sensor-s3p">— mm</span>
+            </div>
+          </div>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid #eee">
+            <div class="live-rows">
+              <div class="live-row">
+                <span class="live-label"><b>Alto calculado</b></span>
+                <span class="live-val mono" id="dim-alto">— mm</span>
+              </div>
+              <div class="live-row">
+                <span class="live-label"><b>Ancho calculado</b></span>
+                <span class="live-val mono" id="dim-ancho">— mm</span>
+              </div>
+              <div class="live-row">
+                <span class="live-label"><b>Largo calculado</b></span>
+                <span class="live-val mono" id="dim-largo">— mm</span>
+              </div>
+            </div>
+          </div>
+          <div id="sensor-alerta" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border-left:4px solid #DC2626;border-radius:4px;color:#DC2626;font-size:13px">
+            ⚠ Sensor con lectura inconsistente — verificar alineacion
+          </div>
+        </div>
+
+        <!-- ── PANEL CALIBRACION ── -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-header">
+            <div class="card-title">Calibracion del sistema</div>
+            <span class="card-sub">Sistema diferencial — 5 sensores</span>
+          </div>
+          <div style="font-size:13px;color:#555;margin-bottom:14px">
+            Seguí los pasos en orden. Repetir cada vez que se mueva o desmonte cualquier sensor.
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="padding:10px 14px;background:#F4F4F4;border-radius:8px;font-size:13px;display:flex;gap:10px;align-items:flex-start">
+              <span style="font-weight:700;color:#0A1628;min-width:60px">Paso 1</span>
+              <span>Asegurate que la cinta esté <b>completamente vacía</b> y ningún objeto tape los sensores.</span>
+            </div>
+            <div style="padding:10px 14px;background:#F4F4F4;border-radius:8px;font-size:13px;display:flex;gap:10px;align-items:flex-start">
+              <span style="font-weight:700;color:#0A1628;min-width:60px">Paso 2</span>
+              <span>Verificá que <b>S2 y S2'</b> estén exactamente a la misma altura desde la cinta (tolerancia ±0.5 mm). Usar nivel o calibre.</span>
+            </div>
+            <div style="padding:10px 14px;background:#F4F4F4;border-radius:8px;font-size:13px;display:flex;gap:10px;align-items:flex-start">
+              <span style="font-weight:700;color:#0A1628;min-width:60px">Paso 3</span>
+              <span>Verificá que <b>S3 y S3'</b> estén en el mismo eje longitudinal de la cinta. Usar hilo tensado o regla.</span>
+            </div>
+            <div style="padding:10px 14px;background:#F4F4F4;border-radius:8px;font-size:13px;display:flex;gap:10px;align-items:flex-start">
+              <span style="font-weight:700;color:#0A1628;min-width:60px">Paso 4</span>
+              <span>Hacé click en <b>"Iniciar calibración"</b>. El sistema lee los 5 sensores y guarda los valores de referencia en <span style="font-family:monospace">calibracion.json</span>.</span>
+            </div>
+          </div>
+          <div style="margin-top:16px;display:flex;align-items:center;gap:12px">
+            <button class="btn-primary" onclick="iniciarCalibracion()">Iniciar calibracion</button>
+            <span id="calib-estado" style="font-size:13px;color:#555"></span>
+          </div>
+          <div id="calib-resultados" style="display:none;margin-top:14px;padding:12px 16px;background:#F0FDF4;border-left:4px solid #16A34A;border-radius:8px;font-size:13px">
+            <b style="color:#16A34A">✓ Calibracion guardada correctamente</b>
+            <div style="margin-top:8px;color:#555;font-family:monospace;font-size:12px" id="calib-valores"></div>
+          </div>
+        </div>
+
       </div>
 
       <!-- ══════════════════════ TIPOS DE PIEZAS ══════════════════════ -->
@@ -273,7 +360,7 @@
             </table>
           </div>
 
-          <!-- FORMULARIO NUEVA PIEZA — con IDs corregidos -->
+          <!-- FORMULARIO NUEVA PIEZA -->
           <div class="card" id="form-card" style="display:none">
             <div class="card-title">Nueva pieza</div>
             <div class="form-group">
@@ -352,11 +439,12 @@
           <div class="card-header">
             <div class="card-title">247 inspecciones encontradas</div>
             <a onclick="exportarCSV()" class="btn-ghost" style="cursor:pointer">Exportar CSV</a>
+          </div>
           <table class="data-table">
             <thead>
               <tr><th>#</th><th>Pieza</th><th>Largo (mm)</th><th>OD (mm)</th><th>ID (mm)</th><th>Estado</th><th>Fecha y hora</th></tr>
             </thead>
-            <tbody id="historial-table"></tbody>
+            <tbody id="historial-table">
               <tr><td class="mono gray">#247</td><td>Niple NPT 1/2"</td><td class="mono">58.2</td><td class="mono">21.34</td><td class="mono">14.02</td><td><span class="pill ok">Aprobada</span></td><td class="gray small">Hoy 14:32</td></tr>
               <tr><td class="mono gray">#246</td><td>Brida DN25</td><td class="mono">42.1</td><td class="mono">25.84</td><td class="mono">—</td><td><span class="pill fail">Rechazada</span></td><td class="gray small">Hoy 14:31</td></tr>
               <tr><td class="mono gray">#245</td><td>Union NPT 3/4"</td><td class="mono">65.0</td><td class="mono">26.71</td><td class="mono">18.01</td><td><span class="pill ok">Aprobada</span></td><td class="gray small">Hoy 14:29</td></tr>
