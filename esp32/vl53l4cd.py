@@ -112,19 +112,19 @@ _CONFIG_DEFAULT = bytes([
 
 # ─── Funciones de bajo nivel para leer/escribir registros ────────────────────
 
-def _escribir(i2c, registro, datos):
-    """Escribe uno o más bytes en un registro de 16 bits."""
+def _escribir(i2c, direccion, registro, datos):
+    """Escribe uno o más bytes en un registro de 16 bits del sensor en 'direccion'."""
     reg_alto = (registro >> 8) & 0xFF
     reg_bajo = registro & 0xFF
-    i2c.writeto(_DIRECCION_I2C, bytes([reg_alto, reg_bajo]) + bytes(datos))
+    i2c.writeto(direccion, bytes([reg_alto, reg_bajo]) + bytes(datos))
 
 
-def _leer(i2c, registro, n_bytes):
-    """Lee n_bytes desde un registro de 16 bits. Devuelve bytes."""
+def _leer(i2c, direccion, registro, n_bytes):
+    """Lee n_bytes desde un registro de 16 bits del sensor en 'direccion'."""
     reg_alto = (registro >> 8) & 0xFF
     reg_bajo = registro & 0xFF
-    i2c.writeto(_DIRECCION_I2C, bytes([reg_alto, reg_bajo]))
-    return i2c.readfrom(_DIRECCION_I2C, n_bytes)
+    i2c.writeto(direccion, bytes([reg_alto, reg_bajo]))
+    return i2c.readfrom(direccion, n_bytes)
 
 
 # ─── Clase principal ──────────────────────────────────────────────────────────
@@ -132,8 +132,9 @@ def _leer(i2c, registro, n_bytes):
 class VL53L4CD:
     """Driver para el sensor ToF láser VL53L4CD en MicroPython."""
 
-    def __init__(self, i2c):
+    def __init__(self, i2c, direccion=0x29):
         self.i2c = i2c
+        self.direccion = direccion  # Dirección I2C asignada a este sensor
 
     def inicializar(self):
         """
@@ -141,41 +142,41 @@ class VL53L4CD:
         y arranca las mediciones continuas.
         """
         # Verificar que el sensor responde con el ID correcto
-        who_am_i = _leer(self.i2c, _REG_WHO_AM_I, 1)[0]
+        who_am_i = _leer(self.i2c, self.direccion, _REG_WHO_AM_I, 1)[0]
         if who_am_i != 0xEB:
             raise Exception(
-                "VL53L4CD no encontrado en I2C 0x29. "
-                "WHO_AM_I esperado: 0xEB, recibido: 0x{:02X}".format(who_am_i)
+                "VL53L4CD no encontrado en I2C 0x{:02X}. "
+                "WHO_AM_I esperado: 0xEB, recibido: 0x{:02X}".format(
+                    self.direccion, who_am_i
+                )
             )
 
         # Cargar la secuencia de configuración completa del ULD de ST
-        # Se escribe en un solo bloque a partir del registro 0x002D
-        _escribir(self.i2c, _REGISTRO_INICIO_CONFIG, _CONFIG_DEFAULT)
+        _escribir(self.i2c, self.direccion, _REGISTRO_INICIO_CONFIG, _CONFIG_DEFAULT)
 
         # Arrancar mediciones continuas (0x40 en el registro SYSTEM_START)
-        _escribir(self.i2c, _REG_SYSTEM_START, [0x40])
+        _escribir(self.i2c, self.direccion, _REG_SYSTEM_START, [0x40])
 
     def leer_distancia(self):
         """
         Espera a que haya un dato nuevo, lee la distancia en mm,
         limpia la interrupción y devuelve la distancia como entero.
         """
-        # Esperar hasta que el sensor indique que hay un resultado listo.
-        # El registro RANGE_STATUS vale 0x09 cuando el dato es válido.
+        # Esperar hasta que RANGE_STATUS valga 0x09 (dato válido listo)
         for _ in range(200):
-            estado = _leer(self.i2c, _REG_RANGE_STATUS, 1)[0]
+            estado = _leer(self.i2c, self.direccion, _REG_RANGE_STATUS, 1)[0]
             if estado == 0x09:
                 break
 
         # Leer los 2 bytes de distancia (big-endian) y convertirlos a entero
-        datos = _leer(self.i2c, _REG_DISTANCE_MM, 2)
+        datos = _leer(self.i2c, self.direccion, _REG_DISTANCE_MM, 2)
         distancia_mm = (datos[0] << 8) | datos[1]
 
         # Limpiar la interrupción para habilitar la siguiente medición
-        _escribir(self.i2c, _REG_INTERRUPT_CLEAR, [0x01])
+        _escribir(self.i2c, self.direccion, _REG_INTERRUPT_CLEAR, [0x01])
 
         return distancia_mm
 
     def detener(self):
         """Detiene las mediciones continuas."""
-        _escribir(self.i2c, _REG_SYSTEM_START, [0x00])
+        _escribir(self.i2c, self.direccion, _REG_SYSTEM_START, [0x00])
