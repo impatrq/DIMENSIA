@@ -5,6 +5,7 @@
 
 import sys
 import os
+import json
 import threading
 import requests
 
@@ -14,7 +15,8 @@ from receptor_serial import ReceptorSerial
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "database"))
 from db import BaseDatos
 
-_URL_BACKEND = "http://localhost:5000/inspeccion"
+_URL_BACKEND        = "http://localhost:5000/inspeccion"
+_RUTA_CALIBRACION   = os.path.join(os.path.dirname(__file__), "calibracion.json")
 
 # Pieza actualmente cargada por el lector QR.
 # Es None si todavía no se escaneó ninguna.
@@ -63,37 +65,66 @@ def leer_qr_loop(db):
             ))
 
 
-def evaluar_mediciones(mediciones, pieza):
+def cargar_calibracion():
     """
-    Compara las mediciones de los 3 sensores contra las referencias
-    y tolerancias de la pieza. Devuelve "APROBADA" o "RECHAZADA".
-    Si id_ref es None, se omite la comparación de diámetro interior
-    (aplica a piezas sin agujero como bridas y codos).
+    Lee raspberry/calibracion.json con los valores de referencia del banco de medición.
+    Devuelve el dict de calibración o None si el archivo no existe.
+    Ejemplo de contenido:
+        {"REF_S1": 200, "D_S2_S2p": 150, "D_S3_S3p": 180}
+    """
+    if not os.path.exists(_RUTA_CALIBRACION):
+        print("AVISO: calibracion.json no encontrado. Las dimensiones no se calcularán.")
+        return None
+
+    with open(_RUTA_CALIBRACION, "r") as f:
+        return json.load(f)
+
+
+def calcular_dimensiones(lecturas, calibracion):
+    """
+    Aplica las fórmulas diferenciales para obtener las dimensiones reales de la pieza.
+    Las lecturas son distancias brutas en mm desde cada sensor hasta la pieza.
+
+    Fórmulas:
+      alto  = REF_S1   - s1          (distancia desde arriba)
+      ancho = D_S2_S2p - s2 - s2p    (espacio libre entre sensor izq. y der.)
+      largo = D_S3_S3p - s3 - s3p    (espacio libre entre sensor frontal y posterior)
+    """
+    alto  = round(calibracion["REF_S1"]    - lecturas["s1"], 1)
+    ancho = round(calibracion["D_S2_S2p"]  - lecturas["s2"] - lecturas["s2p"], 1)
+    largo = round(calibracion["D_S3_S3p"]  - lecturas["s3"] - lecturas["s3p"], 1)
+
+    return {"alto": alto, "ancho": ancho, "largo": largo}
+
+
+def evaluar_mediciones(dimensiones, pieza):
+    """
+    Compara las dimensiones calculadas contra las referencias de la pieza.
+    Devuelve "APROBADA" o "RECHAZADA".
+    El diámetro interior (id_ref) no se evalúa por ahora — el sistema
+    diferencial de 5 sensores no lo mide todavía.
     """
     def dentro_de_tolerancia(valor, referencia, tolerancia):
         return (referencia - tolerancia) <= valor <= (referencia + tolerancia)
 
-    largo_ok = dentro_de_tolerancia(
-        mediciones["s0"], pieza["largo_ref"], pieza["largo_tol"]
+    # alto → largo de la pieza (sensor S1 mide desde arriba)
+    alto_ok = dentro_de_tolerancia(
+        dimensiones["alto"], pieza["largo_ref"], pieza["largo_tol"]
     )
-    od_ok = dentro_de_tolerancia(
-        mediciones["s1"], pieza["od_ref"], pieza["od_tol"]
+    # ancho → diámetro exterior (sensores S2 y S2p miden de costado)
+    ancho_ok = dentro_de_tolerancia(
+        dimensiones["ancho"], pieza["od_ref"], pieza["od_tol"]
     )
 
-    # El diámetro interior es opcional — si no tiene referencia, se ignora
-    if pieza["id_ref"] is not None:
-        id_ok = dentro_de_tolerancia(
-            mediciones["s2"], pieza["id_ref"], pieza["id_tol"]
-        )
-    else:
-        id_ok = True
-
-    return "APROBADA" if (largo_ok and od_ok and id_ok) else "RECHAZADA"
+    return "APROBADA" if (alto_ok and ancho_ok) else "RECHAZADA"
 
 
 def main():
     db = BaseDatos()
     receptor = ReceptorSerial()
+
+    # Cargar la calibración del banco de medición al arrancar
+    calibracion = cargar_calibracion()
 
     # El hilo del QR corre como daemon para que muera solo cuando termina el programa
     hilo_qr = threading.Thread(target=leer_qr_loop, args=(db,), daemon=True)
@@ -113,20 +144,35 @@ def main():
                 print("Esperando QR...")
                 continue
 
-            mediciones = {
-                "s0": datos.get("s0"),
-                "s1": datos.get("s1"),
-                "s2": datos.get("s2"),
+            # Extraer las 5 lecturas brutas del JSON de la ESP32
+            lecturas = {
+                "s1":  datos.get("s1"),
+                "s2":  datos.get("s2"),
+                "s2p": datos.get("s2p"),
+                "s3":  datos.get("s3"),
+                "s3p": datos.get("s3p"),
             }
 
-            resultado = evaluar_mediciones(mediciones, pieza_actual)
+            # Calcular dimensiones reales si hay calibración disponible
+            if calibracion is not None:
+                dimensiones = calcular_dimensiones(lecturas, calibracion)
+                resultado = evaluar_mediciones(dimensiones, pieza_actual)
+            else:
+                print("AVISO: sin calibración, no se puede evaluar.")
+                dimensiones = {"alto": None, "ancho": None, "largo": None}
+                resultado = "RECHAZADA"
 
             payload = {
                 "pieza":     pieza_actual["nombre"],
-                "largo":     mediciones["s0"],
-                "od":        mediciones["s1"],
-                "id":        mediciones["s2"],
+                "largo":     dimensiones["alto"],
+                "od":        dimensiones["ancho"],
+                "id":        None,
                 "resultado": resultado,
+                "s1_raw":    lecturas["s1"],
+                "s2_raw":    lecturas["s2"],
+                "s2p_raw":   lecturas["s2p"],
+                "s3_raw":    lecturas["s3"],
+                "s3p_raw":   lecturas["s3p"],
             }
 
             try:
@@ -135,11 +181,10 @@ def main():
                 print("Error al enviar al backend: {}".format(e))
                 continue
 
-            print("Enviado: {} | largo:{}mm od:{}mm id:{}mm | {}".format(
+            print("Enviado: {} | alto:{}mm ancho:{}mm | {}".format(
                 pieza_actual["nombre"],
-                mediciones["s0"],
-                mediciones["s1"],
-                mediciones["s2"],
+                dimensiones["alto"],
+                dimensiones["ancho"],
                 resultado,
             ))
 
