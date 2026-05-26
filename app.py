@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas, guardar_pieza
+from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas, guardar_pieza, guardar_calibracion, obtener_calibracion
 
 app = Flask(__name__) 
 CORS(app)
@@ -56,6 +56,24 @@ def set_operario():
 @app.route('/operario_activo', methods=['GET'])
 def get_operario():
     return jsonify(operario_activo)
+
+# Guardar calibracion del sistema diferencial
+@app.route('/calibracion', methods=['POST'])
+def set_calibracion():
+    datos = request.get_json()
+    guardar_calibracion(datos)
+    return jsonify({
+        'estado': 'ok',
+        'REF_S1': datos.get('REF_S1'),
+        'D_S2_S2p': datos.get('D_S2_S2p'),
+        'D_S3_S3p': datos.get('D_S3_S3p')
+    })
+
+# Obtener ultima calibracion guardada
+@app.route('/calibracion', methods=['GET'])
+def get_calibracion():
+    calibracion = obtener_calibracion()
+    return jsonify(calibracion)
 
 # ── ARRANCAR SERVIDOR ────────────────────────────────
 if __name__ == '__main__':
