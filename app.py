@@ -75,6 +75,23 @@ def get_calibracion():
     calibracion = obtener_calibracion()
     return jsonify(calibracion)
 
+# Lecturas brutas de los 5 sensores en memoria
+lecturas_sensores = {
+    'S1': None, 'S2': None, 'S2p': None, 'S3': None, 'S3p': None
+}
+
+# Recibir lecturas de los 5 sensores desde la Raspberry Pi
+@app.route('/sensores', methods=['POST'])
+def set_sensores():
+    datos = request.get_json()
+    lecturas_sensores.update(datos)
+    return jsonify({'estado': 'ok'})
+
+# Obtener lecturas actuales de los 5 sensores
+@app.route('/sensores', methods=['GET'])
+def get_sensores():
+    return jsonify(lecturas_sensores)
+
 # ── ARRANCAR SERVIDOR ────────────────────────────────
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
