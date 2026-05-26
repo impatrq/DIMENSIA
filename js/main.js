@@ -98,10 +98,53 @@ async function cargarPiezas() {
   }
 }
 
+// ── CARGAR SENSORES DESDE EL BACKEND ────────────────────────
+async function cargarSensores() {
+  try {
+    const res = await fetch(`${API}/sensores`);
+    const data = await res.json();
+
+    // Actualizar lecturas brutas
+    document.getElementById('sensor-s1').textContent  = data.S1  !== null ? data.S1  + ' mm' : '— mm';
+    document.getElementById('sensor-s2').textContent  = data.S2  !== null ? data.S2  + ' mm' : '— mm';
+    document.getElementById('sensor-s2p').textContent = data.S2p !== null ? data.S2p + ' mm' : '— mm';
+    document.getElementById('sensor-s3').textContent  = data.S3  !== null ? data.S3  + ' mm' : '— mm';
+    document.getElementById('sensor-s3p').textContent = data.S3p !== null ? data.S3p + ' mm' : '— mm';
+
+    // Calcular dimensiones con formula diferencial
+    // Necesitamos la calibracion para calcular
+    const resCalib = await fetch(`${API}/calibracion`);
+    const calib = await resCalib.json();
+
+    if (calib.ref_s1 && data.S1 !== null) {
+      const alto  = (calib.ref_s1 - data.S1).toFixed(1);
+      document.getElementById('dim-alto').textContent = alto + ' mm';
+    }
+    if (calib.d_s2_s2p && data.S2 !== null && data.S2p !== null) {
+      const ancho = (calib.d_s2_s2p - data.S2 - data.S2p).toFixed(1);
+      document.getElementById('dim-ancho').textContent = ancho + ' mm';
+    }
+    if (calib.d_s3_s3p && data.S3 !== null && data.S3p !== null) {
+      const largo = (calib.d_s3_s3p - data.S3 - data.S3p).toFixed(1);
+      document.getElementById('dim-largo').textContent = largo + ' mm';
+    }
+
+    // Verificar consistencia — detectar sensor con problema
+    const alerta = document.getElementById('sensor-alerta');
+    const algunNull = Object.values(data).some(v => v === null);
+    alerta.style.display = algunNull ? 'block' : 'none';
+
+  } catch (err) {
+    console.log('No se pudieron cargar los sensores');
+  }
+}
+
 // ── INICIAR ──────────────────────────────────────────────────
 cargarInspecciones();
 cargarPiezas();
+cargarSensores();
 setInterval(cargarInspecciones, 5000);
+setInterval(cargarSensores, 2000);
 
 // ── GUARDAR PIEZA ──────────────────────────────────────
 async function guardarPieza() {
@@ -161,7 +204,6 @@ function iniciarSesion() {
 
   operarioActual = { nombre, legajo };
 
-  // Avisar al backend quién está de turno
   fetch('http://127.0.0.1:5000/operario_activo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -173,6 +215,7 @@ function iniciarSesion() {
   badge.style.display = 'block';
   document.getElementById('login-screen').style.display = 'none';
 }
+
 // ── EXPORTAR CSV ──────────────────────────────────────
 function exportarCSV() {
   const encabezado = ['#', 'Pieza', 'Largo (mm)', 'OD (mm)', 'ID (mm)', 'Estado', 'Fecha y Hora'];
@@ -193,6 +236,7 @@ function exportarCSV() {
   a.download = 'inspecciones_dimensia.csv';
   a.click();
 }
+
 // ── CALIBRACION ──────────────────────────────────────
 async function iniciarCalibracion() {
   const estado = document.getElementById('calib-estado');
