@@ -53,8 +53,9 @@ async function cargarInspecciones() {
       const fila = document.createElement('tr');
       fila.innerHTML = `
         <td>${insp.pieza}</td>
-        <td class="mono">${insp.od ? insp.od.toFixed(2) : '—'}</td>
-        <td class="mono">${insp.id_med ? insp.id_med.toFixed(2) : '—'}</td>
+        <td class="mono">${insp.alto ? insp.alto.toFixed(1) : '—'}</td>
+        <td class="mono">${insp.ancho ? insp.ancho.toFixed(1) : '—'}</td>
+        <td class="mono">${insp.largo ? insp.largo.toFixed(1) : '—'}</td>
         <td><span class="pill ${insp.resultado === 'APROBADA' ? 'ok' : 'fail'}">${insp.resultado}</span></td>
       `;
       tabla.appendChild(fila);
@@ -104,20 +105,17 @@ async function cargarSensores() {
     const res = await fetch(`${API}/sensores`);
     const data = await res.json();
 
-    // Actualizar lecturas brutas
     document.getElementById('sensor-s1').textContent  = data.S1  !== null ? data.S1  + ' mm' : '— mm';
     document.getElementById('sensor-s2').textContent  = data.S2  !== null ? data.S2  + ' mm' : '— mm';
     document.getElementById('sensor-s2p').textContent = data.S2p !== null ? data.S2p + ' mm' : '— mm';
     document.getElementById('sensor-s3').textContent  = data.S3  !== null ? data.S3  + ' mm' : '— mm';
     document.getElementById('sensor-s3p').textContent = data.S3p !== null ? data.S3p + ' mm' : '— mm';
 
-    // Calcular dimensiones con formula diferencial
-    // Necesitamos la calibracion para calcular
     const resCalib = await fetch(`${API}/calibracion`);
     const calib = await resCalib.json();
 
     if (calib.ref_s1 && data.S1 !== null) {
-      const alto  = (calib.ref_s1 - data.S1).toFixed(1);
+      const alto = (calib.ref_s1 - data.S1).toFixed(1);
       document.getElementById('dim-alto').textContent = alto + ' mm';
     }
     if (calib.d_s2_s2p && data.S2 !== null && data.S2p !== null) {
@@ -129,7 +127,6 @@ async function cargarSensores() {
       document.getElementById('dim-largo').textContent = largo + ' mm';
     }
 
-    // Verificar consistencia — detectar sensor con problema
     const alerta = document.getElementById('sensor-alerta');
     const algunNull = Object.values(data).some(v => v === null);
     alerta.style.display = algunNull ? 'block' : 'none';
@@ -218,14 +215,14 @@ function iniciarSesion() {
 
 // ── EXPORTAR CSV ──────────────────────────────────────
 function exportarCSV() {
-  const encabezado = ['#', 'Pieza', 'Largo (mm)', 'OD (mm)', 'ID (mm)', 'Estado', 'Fecha y Hora'];
+  const encabezado = ['#', 'Pieza', 'Alto (mm)', 'Ancho (mm)', 'Largo (mm)', 'Estado', 'Fecha y Hora'];
   const datos = [
-    ['247', 'Niple NPT 1/2"', '58.2', '21.34', '14.02', 'Aprobada', 'Hoy 14:32'],
-    ['246', 'Brida DN25', '42.1', '25.84', '—', 'Rechazada', 'Hoy 14:31'],
-    ['245', 'Union NPT 3/4"', '65.0', '26.71', '18.01', 'Aprobada', 'Hoy 14:29'],
-    ['244', 'Niple NPT 1/2"', '57.9', '21.31', '14.00', 'Aprobada', 'Hoy 14:28'],
-    ['243', 'Codo 90° 1/2"', '38.5', '21.35', '—', 'Aprobada', 'Hoy 14:26'],
-    ['242', 'Brida DN25', '41.9', '26.10', '—', 'Rechazada', 'Hoy 14:24'],
+    ['247', 'Niple NPT 1/2"', '21.3', '21.3', '58.2', 'Aprobada', 'Hoy 14:32'],
+    ['246', 'Brida DN25',     '25.8', '25.8', '42.1', 'Rechazada','Hoy 14:31'],
+    ['245', 'Union NPT 3/4"', '26.7', '26.7', '65.0', 'Aprobada', 'Hoy 14:29'],
+    ['244', 'Niple NPT 1/2"', '21.3', '21.3', '57.9', 'Aprobada', 'Hoy 14:28'],
+    ['243', 'Codo 90° 1/2"',  '21.3', '21.3', '38.5', 'Aprobada', 'Hoy 14:26'],
+    ['242', 'Brida DN25',     '25.8', '25.8', '41.9', 'Rechazada','Hoy 14:24'],
   ];
 
   const csv = [encabezado, ...datos].map(f => f.join(',')).join('\n');
