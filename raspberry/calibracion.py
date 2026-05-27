@@ -5,6 +5,7 @@
 
 import json
 import os
+import requests
 from receptor_serial import ReceptorSerial
 
 _RUTA_CALIBRACION = os.path.join(os.path.dirname(__file__), "calibracion.json")
@@ -74,6 +75,13 @@ def calibrar(receptor):
     print("  D_S2_S2p = {} mm  (referencia de ancho)".format(d_s2_s2p))
     print("  D_S3_S3p = {} mm  (referencia de largo)".format(d_s3_s3p))
     print("\nListo. El sistema está calibrado.")
+
+    # Sincronizar con el backend para que el dashboard use los nuevos valores
+    try:
+        requests.post("http://localhost:5000/calibracion", json=calibracion, timeout=3)
+        print("Calibración sincronizada con el backend.")
+    except Exception:
+        print("Aviso: no se pudo sincronizar con el backend. Los valores quedaron guardados localmente.")
 
     return calibracion
 
