@@ -65,7 +65,24 @@ def leer_qr_loop(db):
             ))
 
 
+<<<<<<< HEAD
 def cargar_calibracion():
+=======
+def obtener_operario():
+    """
+    Consulta al backend cuál es el operario que inició sesión.
+    Si el backend no responde o hay cualquier error, devuelve un valor por defecto
+    para no interrumpir el loop principal bajo ninguna circunstancia.
+    """
+    try:
+        respuesta = requests.get("http://localhost:5000/operario_activo", timeout=2)
+        return respuesta.json()
+    except Exception:
+        return {"operario": "Sin identificar", "legajo": ""}
+
+
+def evaluar_mediciones(mediciones, pieza):
+>>>>>>> origin/main
     """
     Lee raspberry/calibracion.json con los valores de referencia del banco de medición.
     Devuelve el dict de calibración o None si el archivo no existe.
@@ -174,17 +191,25 @@ def main():
                 dimensiones = {"alto": None, "ancho": None, "largo": None}
                 resultado = "RECHAZADA"
 
+            # Obtener el operario activo desde el backend
+            operario_data = obtener_operario()
+
             payload = {
                 "pieza":     pieza_actual["nombre"],
                 "largo":     dimensiones["alto"],
                 "od":        dimensiones["ancho"],
                 "id":        None,
                 "resultado": resultado,
+<<<<<<< HEAD
                 "s1_raw":    lecturas["s1"],
                 "s2_raw":    lecturas["s2"],
                 "s2p_raw":   lecturas["s2p"],
                 "s3_raw":    lecturas["s3"],
                 "s3p_raw":   lecturas["s3p"],
+=======
+                "operario":  operario_data["operario"],
+                "legajo":    operario_data["legajo"],
+>>>>>>> origin/main
             }
 
             try:
@@ -193,11 +218,20 @@ def main():
                 print("Error al enviar al backend: {}".format(e))
                 continue
 
+<<<<<<< HEAD
             print("Enviado: {} | alto:{}mm ancho:{}mm | {}".format(
                 pieza_actual["nombre"],
                 dimensiones["alto"],
                 dimensiones["ancho"],
                 resultado,
+=======
+            print("Enviado: {} | largo:{}mm od:{}mm id:{}mm | operario: {}".format(
+                resultado,
+                mediciones["s0"],
+                mediciones["s1"],
+                mediciones["s2"],
+                operario_data["operario"],
+>>>>>>> origin/main
             ))
 
     except KeyboardInterrupt:
