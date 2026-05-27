@@ -153,6 +153,18 @@ def main():
                 "s3p": datos.get("s3p"),
             }
 
+            # Enviar lecturas brutas al dashboard — falla silenciosamente si el backend no está
+            try:
+                requests.post("http://localhost:5000/sensores", json={
+                    "S1":  lecturas["s1"],
+                    "S2":  lecturas["s2"],
+                    "S2p": lecturas["s2p"],
+                    "S3":  lecturas["s3"],
+                    "S3p": lecturas["s3p"],
+                }, timeout=1)
+            except Exception:
+                pass
+
             # Calcular dimensiones reales si hay calibración disponible
             if calibracion is not None:
                 dimensiones = calcular_dimensiones(lecturas, calibracion)
