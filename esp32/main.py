@@ -1,6 +1,11 @@
 # Programa principal — ESP32
+<<<<<<< HEAD
+# Lee los 5 sensores (método XSHUT) y manda las lecturas brutas por Serial
+# La Raspberry Pi calcula las dimensiones reales y decide el resultado
+=======
 # Lee los 3 sensores (método XSHUT) y manda las mediciones por Serial a la Raspberry Pi
 # La lógica de tolerancias y el resultado (APROBADA/RECHAZADA) los decide la Raspberry Pi
+>>>>>>> origin/main
 # MicroPython
 
 from machine import I2C, Pin
@@ -18,21 +23,32 @@ comunicacion = Comunicacion()
 
 print("Inicializando sensores...")
 
+<<<<<<< HEAD
+# inicializar_sensores() devuelve un dict: {"s1": sensor, "s2": ..., ...}
+=======
 # inicializar_sensores() apaga todos, los enciende de a uno,
 # les asigna su dirección y devuelve la lista lista para usar
+>>>>>>> origin/main
 sensores = gestor.inicializar_sensores()
 
-print("Sensores listos. Enviando datos...")
+print("5 sensores listos. Enviando datos...")
 
 # ─── Loop principal ───────────────────────────────────────────────────────────
 
 while True:
+<<<<<<< HEAD
+    # Leer los 5 sensores — todos activos en el bus con distintas direcciones
+    mediciones = {}
+    for nombre, sensor in sensores.items():
+        mediciones[nombre] = sensor.leer_distancia()
+=======
     # Leer los 3 sensores — ahora todos están activos en el bus con distintas direcciones
     mediciones = {}
     for i, sensor in enumerate(sensores):
         mediciones["s{}".format(i)] = sensor.leer_distancia()
+>>>>>>> origin/main
 
-    # Enviar las mediciones crudas por Serial — la Raspberry Pi decide el resultado
+    # Enviar las 5 lecturas brutas por Serial — la Raspberry Pi decide el resultado
     comunicacion.enviar_mediciones(mediciones)
 
     sleep_ms(500)
