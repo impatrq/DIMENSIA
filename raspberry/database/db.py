@@ -19,43 +19,80 @@ class BaseDatos:
         self.crear_tablas()
 
     def crear_tablas(self):
-        """Crea la tabla inspecciones si todavía no existe."""
+        """Crea las tablas inspecciones y calibracion si todavía no existen."""
         self.conexion.execute("""
             CREATE TABLE IF NOT EXISTS inspecciones (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
                 fecha     TEXT,
                 hora      TEXT,
                 aprobada  INTEGER,
-                s0        REAL,
-                s1        REAL,
-                s2        REAL,
-                s3        REAL,
+                alto      REAL,     -- dimensión calculada: altura de la pieza
+                ancho     REAL,     -- dimensión calculada: diámetro exterior
+                largo     REAL,     -- dimensión calculada: largo de la pieza
+                s1_raw    REAL,     -- lectura bruta sensor alto
+                s2_raw    REAL,     -- lectura bruta sensor ancho izquierdo
+                s2p_raw   REAL,     -- lectura bruta sensor ancho derecho
+                s3_raw    REAL,     -- lectura bruta sensor largo frontal
+                s3p_raw   REAL,     -- lectura bruta sensor largo posterior
                 timestamp INTEGER
+            )
+        """)
+        self.conexion.execute("""
+            CREATE TABLE IF NOT EXISTS calibracion (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha     TEXT,
+                hora      TEXT,
+                ref_s1    REAL,     -- distancia de referencia sensor alto (banco vacío)
+                d_s2_s2p  REAL,     -- suma de referencia sensores ancho (banco vacío)
+                d_s3_s3p  REAL      -- suma de referencia sensores largo (banco vacío)
             )
         """)
         self.conexion.commit()
 
     def guardar_inspeccion(self, datos):
         """
-        Recibe el dict JSON de la ESP32 y guarda una fila en la tabla.
+        Recibe el payload del backend y guarda una fila en la tabla.
         La fecha y hora las genera la Raspberry Pi al momento de recibir el dato.
         """
         ahora = datetime.now()
-        mediciones = datos.get("mediciones", {})
 
         self.conexion.execute("""
             INSERT INTO inspecciones
-                (fecha, hora, aprobada, s0, s1, s2, s3, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (fecha, hora, aprobada, alto, ancho, largo,
+                 s1_raw, s2_raw, s2p_raw, s3_raw, s3p_raw, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             ahora.strftime("%Y-%m-%d"),
             ahora.strftime("%H:%M:%S"),
             1 if datos.get("aprobada") else 0,
-            mediciones.get("s0"),
-            mediciones.get("s1"),
-            mediciones.get("s2"),
-            mediciones.get("s3"),
+            datos.get("alto"),
+            datos.get("ancho"),
+            datos.get("largo"),
+            datos.get("s1_raw"),
+            datos.get("s2_raw"),
+            datos.get("s2p_raw"),
+            datos.get("s3_raw"),
+            datos.get("s3p_raw"),
             datos.get("timestamp"),
+        ))
+        self.conexion.commit()
+
+    def guardar_calibracion(self, calibracion):
+        """
+        Guarda una fila en la tabla calibracion con los valores del banco vacío.
+        Recibe el dict {"REF_S1": ..., "D_S2_S2p": ..., "D_S3_S3p": ...}.
+        """
+        ahora = datetime.now()
+
+        self.conexion.execute("""
+            INSERT INTO calibracion (fecha, hora, ref_s1, d_s2_s2p, d_s3_s3p)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            ahora.strftime("%Y-%m-%d"),
+            ahora.strftime("%H:%M:%S"),
+            calibracion.get("REF_S1"),
+            calibracion.get("D_S2_S2p"),
+            calibracion.get("D_S3_S3p"),
         ))
         self.conexion.commit()
 
@@ -78,21 +115,28 @@ class BaseDatos:
 if __name__ == "__main__":
     db = BaseDatos()
 
-    # Insertar 3 filas de ejemplo
+    # Insertar una calibración de ejemplo
+    db.guardar_calibracion({"REF_S1": 198.3, "D_S2_S2p": 149.7, "D_S3_S3p": 181.2})
+    print("Calibración guardada.")
+
+    # Insertar 3 inspecciones de ejemplo con los nuevos campos
     ejemplos = [
         {
             "aprobada": True,
-            "mediciones": {"s0": 150, "s1": 200, "s2": 100, "s3": 300},
+            "alto": 48.5, "ancho": 25.1, "largo": 60.0,
+            "s1_raw": 149, "s2_raw": 62, "s2p_raw": 62, "s3_raw": 60, "s3p_raw": 61,
             "timestamp": 12000,
         },
         {
             "aprobada": False,
-            "mediciones": {"s0": 148, "s1": 201, "s2": 99, "s3": 312},
+            "alto": 51.2, "ancho": 24.8, "largo": 63.4,
+            "s1_raw": 147, "s2_raw": 63, "s2p_raw": 62, "s3_raw": 58, "s3p_raw": 60,
             "timestamp": 12500,
         },
         {
             "aprobada": True,
-            "mediciones": {"s0": 151, "s1": 199, "s2": 101, "s3": 299},
+            "alto": 49.0, "ancho": 25.0, "largo": 60.3,
+            "s1_raw": 149, "s2_raw": 62, "s2p_raw": 63, "s3_raw": 61, "s3p_raw": 60,
             "timestamp": 13000,
         },
     ]
@@ -104,9 +148,9 @@ if __name__ == "__main__":
 
     for fila in db.obtener_ultimas():
         estado = "APROBADA" if fila["aprobada"] else "RECHAZADA"
-        print("{} {} {} | s0:{} s1:{} s2:{} s3:{} | ts:{}".format(
-            fila["id"], fila["fecha"], fila["hora"],
-            fila["s0"], fila["s1"], fila["s2"], fila["s3"],
+        print("{} {} {} | {} | alto:{} ancho:{} largo:{} | ts:{}".format(
+            fila["id"], fila["fecha"], fila["hora"], estado,
+            fila["alto"], fila["ancho"], fila["largo"],
             fila["timestamp"],
         ))
 
