@@ -1,13 +1,12 @@
 # Driver MicroPython para el sensor de distancia VL53L4CD (STMicroelectronics)
-# Comunicación I2C, dirección 0x29, registros de 16 bits
+# Comunicación I2C, registros de 16 bits
 # Basado en el Ultra Lite Driver (ULD) oficial de ST
 
 # ─── Registros principales ────────────────────────────────────────────────────
-_DIRECCION_I2C        = 0x29
 _REG_WHO_AM_I         = 0x010F  # Identificación del chip — debe devolver 0xEB
 _REG_SYSTEM_START     = 0x0087  # 0x40 = iniciar medición continua, 0x00 = detener
 _REG_INTERRUPT_CLEAR  = 0x0086  # Escribir 0x01 para limpiar la interrupción
-_REG_RANGE_STATUS     = 0x0089  # Estado del resultado — 0x09 en bit 0 = dato listo
+_REG_RANGE_STATUS     = 0x0089  # Estado del resultado — 0x09 = dato válido listo
 _REG_DISTANCE_MM      = 0x0096  # Distancia medida: 2 bytes big-endian
 
 # ─── Secuencia de configuración por defecto (ULD de STMicroelectronics) ───────
