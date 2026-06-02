@@ -19,6 +19,10 @@ def index():
 @app.route('/inspeccion', methods=['POST'])
 def nueva_inspeccion():
     datos = request.get_json()
+    # Agregar operario activo automaticamente si no viene en los datos
+    if not datos.get('operario'):
+        datos['operario'] = operario_activo.get('operario')
+        datos['legajo']   = operario_activo.get('legajo')
     guardar_inspeccion(datos)
     return jsonify({'estado': 'ok', 'mensaje': 'Inspeccion guardada'})
 
