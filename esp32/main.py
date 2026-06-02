@@ -40,11 +40,11 @@ def generar_lecturas_simuladas():
         return minimo + (urandom.getrandbits(8) % (maximo - minimo + 1))
 
     return {
-        "s1":  aleatorio(150, 210),  # sensor de alto
-        "s2":  aleatorio(55,  75),   # sensor ancho izquierdo
-        "s2p": aleatorio(55,  75),   # sensor ancho derecho
-        "s3":  aleatorio(75,  95),   # sensor largo frontal
-        "s3p": aleatorio(75,  95),   # sensor largo posterior
+        "s1":  aleatorio(208, 216),  # alto resultante: 270 - s1 → 54 a 62 mm
+        "s2":  aleatorio(67,  72),   # ancho resultante: 160 - s2 - s2p → 19 a 23 mm
+        "s2p": aleatorio(67,  72),
+        "s3":  aleatorio(78,  83),   # largo resultante: 220 - s3 - s3p → 54 a 62 mm
+        "s3p": aleatorio(78,  83),
     }
 
 
