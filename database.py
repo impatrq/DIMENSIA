@@ -31,6 +31,21 @@ def init_db():
             od REAL,
             id_med REAL,
             resultado TEXT,
+            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            operario TEXT,
+            legajo TEXT,
+            lectura_s2p REAL,
+            lectura_s3p REAL
+        )
+    ''')
+
+    # Tabla de calibracion
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS calibracion (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref_s1 REAL,
+            d_s2_s2p REAL,
+            d_s3_s3p REAL,
             fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -54,14 +69,19 @@ def guardar_inspeccion(datos):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute('''
-        INSERT INTO inspecciones (pieza, largo, od, id_med, resultado)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO inspecciones
+          (pieza, largo, od, id_med, resultado, operario, legajo, lectura_s2p, lectura_s3p)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         datos.get('pieza'),
         datos.get('largo'),
         datos.get('od'),
         datos.get('id'),
-        datos.get('resultado')
+        datos.get('resultado'),
+        datos.get('operario'),
+        datos.get('legajo'),
+        datos.get('lectura_s2p'),
+        datos.get('lectura_s3p')
     ))
     conn.commit()
     conn.close()
@@ -106,4 +126,29 @@ def obtener_piezas():
     c.execute('SELECT * FROM piezas ORDER BY nombre')
     filas = [dict(f) for f in c.fetchall()]
     conn.close()
-    return filas 
+    return filas
+
+# ── GUARDAR CALIBRACION ──────────────────────────────
+def guardar_calibracion(datos):
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO calibracion (ref_s1, d_s2_s2p, d_s3_s3p)
+        VALUES (?, ?, ?)
+    ''', (
+        datos.get('REF_S1'),
+        datos.get('D_S2_S2p'),
+        datos.get('D_S3_S3p')
+    ))
+    conn.commit()
+    conn.close()
+
+# ── OBTENER ULTIMA CALIBRACION ───────────────────────
+def obtener_calibracion():
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute('SELECT * FROM calibracion ORDER BY fecha DESC LIMIT 1')
+    fila = c.fetchone()
+    conn.close()
+    return dict(fila) if fila else {}
