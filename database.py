@@ -27,9 +27,9 @@ def init_db():
         CREATE TABLE IF NOT EXISTS inspecciones (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             pieza TEXT NOT NULL,
+            alto REAL,
+            ancho REAL,
             largo REAL,
-            od REAL,
-            id_med REAL,
             resultado TEXT,
             fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             operario TEXT,
@@ -70,13 +70,13 @@ def guardar_inspeccion(datos):
     c = conn.cursor()
     c.execute('''
         INSERT INTO inspecciones
-          (pieza, largo, od, id_med, resultado, operario, legajo, lectura_s2p, lectura_s3p)
+          (pieza, alto, ancho, largo, resultado, operario, legajo, lectura_s2p, lectura_s3p)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         datos.get('pieza'),
+        datos.get('alto'),
+        datos.get('ancho'),
         datos.get('largo'),
-        datos.get('od'),
-        datos.get('id'),
         datos.get('resultado'),
         datos.get('operario'),
         datos.get('legajo'),
