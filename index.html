@@ -82,7 +82,7 @@
       <div class="topbar-right">
         <div class="turno-badge" id="operario-badge" style="display:none"></div>
         <div class="turno-badge">Turno mañana</div>
-        <button class="btn-export">Exportar CSV</button>
+        <a onclick="exportarCSV()" class="btn-export" style="cursor:pointer">Exportar CSV</a>
       </div>
     </header>
 
@@ -201,27 +201,27 @@
               <span class="card-sub live-dot-wrap"><span class="live-dot"></span>Midiendo</span>
             </div>
             <div class="live-rows">
-              <div class="live-row"><span class="live-label">Tipo</span><span class="live-val">Niple NPT 1/2"</span></div>
-              <div class="live-row"><span class="live-label">Norma</span><span class="live-val mono">ASME B16.11</span></div>
+              <div class="live-row"><span class="live-label">Tipo</span><span class="live-val" id="insp-tipo">Sin inspecciones</span></div>
+              <div class="live-row"><span class="live-label">Norma</span><span class="live-val mono" id="insp-norma">—</span></div>
               <div class="live-row">
                 <span class="live-label">Alto</span>
-                <span class="live-val mono">21.3 mm <span class="ref">ref. 21.3 ±0.5</span></span>
+                <span class="live-val mono" id="insp-alto">— mm</span>
               </div>
               <div class="live-row">
                 <span class="live-label">Ancho</span>
-                <span class="live-val mono">21.3 mm <span class="ref">ref. 21.3 ±0.5</span></span>
+                <span class="live-val mono" id="insp-ancho">— mm</span>
               </div>
               <div class="live-row">
                 <span class="live-label">Largo</span>
-                <span class="live-val mono">58.2 mm <span class="ref">ref. 58.0 ±1.0</span></span>
+                <span class="live-val mono" id="insp-largo">— mm</span>
               </div>
-              <div class="live-row"><span class="live-label">Turno</span><span class="live-val">Turno mañana</span></div>
+              <div class="live-row"><span class="live-label">Operario</span><span class="live-val" id="insp-operario">—</span></div>
             </div>
-            <div class="result-box ok">
-              <div class="result-icon">✓</div>
+            <div class="result-box ok" id="insp-resultado-box">
+              <div class="result-icon" id="insp-resultado-icon">—</div>
               <div>
-                <div class="result-title">APROBADA</div>
-                <div class="result-sub">Todas las dimensiones dentro de tolerancia</div>
+                <div class="result-title" id="insp-resultado-titulo">Sin datos</div>
+                <div class="result-sub" id="insp-resultado-sub">Esperando primera inspección</div>
               </div>
             </div>
           </div>
