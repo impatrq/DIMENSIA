@@ -136,12 +136,48 @@ async function cargarSensores() {
   }
 }
 
+// ── CARGAR ULTIMA INSPECCION EN VIVO ────────────────────────
+async function cargarUltimaInspeccion() {
+  try {
+    const res = await fetch(`${API}/inspecciones`);
+    const data = await res.json();
+    if (data.length === 0) return;
+
+    const insp = data[0]; // la más reciente
+
+    document.getElementById('insp-tipo').textContent     = insp.pieza || '—';
+    document.getElementById('insp-norma').textContent    = '—';
+    document.getElementById('insp-alto').textContent     = insp.alto  ? insp.alto.toFixed(1)  + ' mm' : '— mm';
+    document.getElementById('insp-ancho').textContent    = insp.ancho ? insp.ancho.toFixed(1) + ' mm' : '— mm';
+    document.getElementById('insp-largo').textContent    = insp.largo ? insp.largo.toFixed(1) + ' mm' : '— mm';
+    document.getElementById('insp-operario').textContent = insp.operario || '—';
+
+    const aprobada = insp.resultado === 'APROBADA';
+    const box   = document.getElementById('insp-resultado-box');
+    const icon  = document.getElementById('insp-resultado-icon');
+    const titulo = document.getElementById('insp-resultado-titulo');
+    const sub   = document.getElementById('insp-resultado-sub');
+
+    box.className   = aprobada ? 'result-box ok' : 'result-box fail';
+    icon.textContent = aprobada ? '✓' : '✗';
+    titulo.textContent = insp.resultado;
+    sub.textContent  = aprobada
+      ? 'Todas las dimensiones dentro de tolerancia'
+      : 'Una o más dimensiones fuera de tolerancia';
+
+  } catch (err) {
+    console.log('No se pudo cargar la última inspección');
+  }
+}
+
 // ── INICIAR ──────────────────────────────────────────────────
 cargarInspecciones();
 cargarPiezas();
 cargarSensores();
 setInterval(cargarInspecciones, 5000);
 setInterval(cargarSensores, 2000);
+cargarUltimaInspeccion();
+setInterval(cargarUltimaInspeccion, 3000);
 
 // ── GUARDAR PIEZA ──────────────────────────────────────
 async function guardarPieza() {
