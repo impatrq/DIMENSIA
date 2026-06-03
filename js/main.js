@@ -143,7 +143,7 @@ async function cargarUltimaInspeccion() {
     const data = await res.json();
     if (data.length === 0) return;
 
-    const insp = data[0]; // la más reciente
+    const insp = data[0];
 
     document.getElementById('insp-tipo').textContent     = insp.pieza || '—';
     document.getElementById('insp-norma').textContent    = '—';
@@ -153,15 +153,15 @@ async function cargarUltimaInspeccion() {
     document.getElementById('insp-operario').textContent = insp.operario || '—';
 
     const aprobada = insp.resultado === 'APROBADA';
-    const box   = document.getElementById('insp-resultado-box');
-    const icon  = document.getElementById('insp-resultado-icon');
+    const box    = document.getElementById('insp-resultado-box');
+    const icon   = document.getElementById('insp-resultado-icon');
     const titulo = document.getElementById('insp-resultado-titulo');
-    const sub   = document.getElementById('insp-resultado-sub');
+    const sub    = document.getElementById('insp-resultado-sub');
 
-    box.className   = aprobada ? 'result-box ok' : 'result-box fail';
-    icon.textContent = aprobada ? '✓' : '✗';
+    box.className      = aprobada ? 'result-box ok' : 'result-box fail';
+    icon.textContent   = aprobada ? '✓' : '✗';
     titulo.textContent = insp.resultado;
-    sub.textContent  = aprobada
+    sub.textContent    = aprobada
       ? 'Todas las dimensiones dentro de tolerancia'
       : 'Una o más dimensiones fuera de tolerancia';
 
@@ -250,24 +250,39 @@ function iniciarSesion() {
 }
 
 // ── EXPORTAR CSV ──────────────────────────────────────
-function exportarCSV() {
-  const encabezado = ['#', 'Pieza', 'Alto (mm)', 'Ancho (mm)', 'Largo (mm)', 'Estado', 'Fecha y Hora'];
-  const datos = [
-    ['247', 'Niple NPT 1/2"', '21.3', '21.3', '58.2', 'Aprobada', 'Hoy 14:32'],
-    ['246', 'Brida DN25',     '25.8', '25.8', '42.1', 'Rechazada','Hoy 14:31'],
-    ['245', 'Union NPT 3/4"', '26.7', '26.7', '65.0', 'Aprobada', 'Hoy 14:29'],
-    ['244', 'Niple NPT 1/2"', '21.3', '21.3', '57.9', 'Aprobada', 'Hoy 14:28'],
-    ['243', 'Codo 90° 1/2"',  '21.3', '21.3', '38.5', 'Aprobada', 'Hoy 14:26'],
-    ['242', 'Brida DN25',     '25.8', '25.8', '41.9', 'Rechazada','Hoy 14:24'],
-  ];
+async function exportarCSV() {
+  try {
+    const res = await fetch(`${API}/inspecciones`);
+    const data = await res.json();
 
-  const csv = [encabezado, ...datos].map(f => f.join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'inspecciones_dimensia.csv';
-  a.click();
+    if (data.length === 0) {
+      alert('No hay inspecciones para exportar.');
+      return;
+    }
+
+    const encabezado = ['#', 'Pieza', 'Alto (mm)', 'Ancho (mm)', 'Largo (mm)', 'Estado', 'Operario', 'Fecha'];
+    const filas = data.map(i => [
+      i.id,
+      i.pieza     || '—',
+      i.alto      ? i.alto.toFixed(1)  : '—',
+      i.ancho     ? i.ancho.toFixed(1) : '—',
+      i.largo     ? i.largo.toFixed(1) : '—',
+      i.resultado || '—',
+      i.operario  || '—',
+      i.fecha     || '—'
+    ]);
+
+    const csv = [encabezado, ...filas].map(f => f.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'inspecciones_dimensia.csv';
+    a.click();
+
+  } catch (err) {
+    alert('Error al conectar con el backend para exportar.');
+  }
 }
 
 // ── CALIBRACION ──────────────────────────────────────
