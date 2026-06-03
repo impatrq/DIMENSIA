@@ -178,6 +178,8 @@ setInterval(cargarInspecciones, 5000);
 setInterval(cargarSensores, 2000);
 cargarUltimaInspeccion();
 setInterval(cargarUltimaInspeccion, 3000);
+cargarHistorial();
+setInterval(cargarHistorial, 10000);
 
 // ── GUARDAR PIEZA ──────────────────────────────────────
 async function guardarPieza() {
@@ -282,6 +284,44 @@ async function exportarCSV() {
 
   } catch (err) {
     alert('Error al conectar con el backend para exportar.');
+  }
+}
+
+// ── CARGAR HISTORIAL DESDE EL BACKEND ───────────────────────
+async function cargarHistorial() {
+  try {
+    const res = await fetch(`${API}/inspecciones`);
+    const data = await res.json();
+    const tbody = document.getElementById('historial-table');
+    if (!tbody) return;
+
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = '';
+    data.forEach(insp => {
+      const fila = document.createElement('tr');
+      const fecha = insp.fecha ? insp.fecha.replace('T', ' ').substring(0, 16) : '—';
+      fila.innerHTML = `
+        <td class="mono gray">#${insp.id}</td>
+        <td>${insp.pieza || '—'}</td>
+        <td class="mono">${insp.alto  ? insp.alto.toFixed(1)  : '—'}</td>
+        <td class="mono">${insp.ancho ? insp.ancho.toFixed(1) : '—'}</td>
+        <td class="mono">${insp.largo ? insp.largo.toFixed(1) : '—'}</td>
+        <td><span class="pill ${insp.resultado === 'APROBADA' ? 'ok' : 'fail'}">${insp.resultado}</span></td>
+        <td class="gray small">${fecha}</td>
+      `;
+      tbody.appendChild(fila);
+    });
+
+    // Actualizar contador de inspecciones
+    const contador = document.querySelector('#page-historial .card-title');
+    if (contador) contador.textContent = `${data.length} inspecciones encontradas`;
+
+  } catch (err) {
+    console.log('No se pudo cargar el historial');
   }
 }
 
