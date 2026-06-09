@@ -6,6 +6,8 @@ Sistema de control de calidad automatizado para piezas de tornería industrial. 
 
 - **Valentino Mendieta** — Backend Flask, base de datos, dashboard web, Raspberry Pi
 - **Gino Orciani** — Firmware ESP32, sensores VL53L4CD, comunicación UART
+- **Luciano Algozzino** — Estructura física, circuito electrónico, montaje de sensores
+- **Joaquin Korylkiewicz** — Estructura física, soporte mecánico, cinta transportadora
 
 ## Arquitectura del sistema
 
@@ -20,6 +22,7 @@ ESP32 (sensores) → UART → Raspberry Pi 4 → HTTP → Backend Flask → Dash
 | Procesamiento | Raspberry Pi 4 |
 | Backend | Python / Flask / SQLite |
 | Dashboard | HTML / CSS / JavaScript |
+| Estructura | Soporte físico con cinta transportadora |
 
 ## Cómo correr el proyecto
 
