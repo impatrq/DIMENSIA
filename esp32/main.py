@@ -1,17 +1,16 @@
 # Programa principal — ESP32
-<<<<<<< HEAD
 # Lee los 5 sensores (método XSHUT) y manda las lecturas brutas por Serial
 # La Raspberry Pi calcula las dimensiones reales y decide el resultado
-=======
-# Lee los 3 sensores (método XSHUT) y manda las mediciones por Serial a la Raspberry Pi
-# La lógica de tolerancias y el resultado (APROBADA/RECHAZADA) los decide la Raspberry Pi
->>>>>>> origin/main
 # MicroPython
 
 from machine import I2C, Pin
 from time import sleep_ms
+import urandom
 from multiplexor import GestorSensores
 from comunicacion import Comunicacion
+
+# Cambiar a False para usar los sensores reales en producción
+MODO_SIMULACION = True
 
 # ─── Inicialización del hardware ──────────────────────────────────────────────
 
@@ -19,36 +18,49 @@ i2c = I2C(0, sda=Pin(21), scl=Pin(22), freq=400_000)
 gestor = GestorSensores(i2c)
 comunicacion = Comunicacion()
 
-# ─── Setup: encender sensores de a uno y asignarles dirección I2C ─────────────
+# ─── Setup ────────────────────────────────────────────────────────────────────
 
-print("Inicializando sensores...")
+if MODO_SIMULACION:
+    print("MODO SIMULACION ACTIVO")
+else:
+    # inicializar_sensores() devuelve un dict: {"s1": sensor, "s2": ..., ...}
+    print("Inicializando sensores...")
+    sensores = gestor.inicializar_sensores()
+    print("Sensores reales activos")
 
-<<<<<<< HEAD
-# inicializar_sensores() devuelve un dict: {"s1": sensor, "s2": ..., ...}
-=======
-# inicializar_sensores() apaga todos, los enciende de a uno,
-# les asigna su dirección y devuelve la lista lista para usar
->>>>>>> origin/main
-sensores = gestor.inicializar_sensores()
 
-print("5 sensores listos. Enviando datos...")
+def generar_lecturas_simuladas():
+    """
+    Genera lecturas aleatorias dentro de rangos realistas para cada sensor.
+    Útil para probar el sistema completo sin hardware conectado.
+    """
+    def aleatorio(minimo, maximo):
+        # urandom.getrandbits(8) devuelve un entero entre 0 y 255
+        # Se escala al rango deseado con módulo y se suma el mínimo
+        return minimo + (urandom.getrandbits(8) % (maximo - minimo + 1))
+
+    return {
+        "s1":  aleatorio(208, 216),  # alto resultante: 270 - s1 → 54 a 62 mm
+        "s2":  aleatorio(67,  72),   # ancho resultante: 160 - s2 - s2p → 19 a 23 mm
+        "s2p": aleatorio(67,  72),
+        "s3":  aleatorio(78,  83),   # largo resultante: 220 - s3 - s3p → 54 a 62 mm
+        "s3p": aleatorio(78,  83),
+    }
+
 
 # ─── Loop principal ───────────────────────────────────────────────────────────
 
 while True:
-<<<<<<< HEAD
-    # Leer los 5 sensores — todos activos en el bus con distintas direcciones
-    mediciones = {}
-    for nombre, sensor in sensores.items():
-        mediciones[nombre] = sensor.leer_distancia()
-=======
-    # Leer los 3 sensores — ahora todos están activos en el bus con distintas direcciones
-    mediciones = {}
-    for i, sensor in enumerate(sensores):
-        mediciones["s{}".format(i)] = sensor.leer_distancia()
->>>>>>> origin/main
+    if MODO_SIMULACION:
+        # Generar lecturas simuladas en lugar de leer los sensores físicos
+        mediciones = generar_lecturas_simuladas()
+    else:
+        # Leer los 5 sensores reales — todos activos en el bus con distintas direcciones
+        mediciones = {}
+        for nombre, sensor in sensores.items():
+            mediciones[nombre] = sensor.leer_distancia()
 
-    # Enviar las 5 lecturas brutas por Serial — la Raspberry Pi decide el resultado
+    # Enviar las lecturas por Serial — misma ruta tanto en simulación como en real
     comunicacion.enviar_mediciones(mediciones)
 
     sleep_ms(500)
