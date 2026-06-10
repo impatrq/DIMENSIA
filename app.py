@@ -79,22 +79,70 @@ def get_calibracion():
     calibracion = obtener_calibracion()
     return jsonify(calibracion)
 
-# Lecturas brutas de los 5 sensores en memoria
-lecturas_sensores = {
-    'S1': None, 'S2': None, 'S2p': None, 'S3': None, 'S3p': None
+# Estado de los 3 sensores de presencia (booleanos)
+# S1: pieza llegó a la zona → detiene cinta
+# S2: pieza bien posicionada sobre el plato
+# S3: pieza centrada → habilita inicio de rotación
+sensores_presencia = {
+    'S1': False, 'S2': False, 'S3': False
 }
 
-# Recibir lecturas de los 5 sensores desde la Raspberry Pi
+# Recibir estado de los 3 sensores de presencia desde el ESP32
 @app.route('/sensores', methods=['POST'])
 def set_sensores():
     datos = request.get_json()
-    lecturas_sensores.update(datos)
+    for key in ('S1', 'S2', 'S3'):
+        if key in datos:
+            sensores_presencia[key] = bool(datos[key])
     return jsonify({'estado': 'ok'})
 
-# Obtener lecturas actuales de los 5 sensores
+# Obtener estado actual de los 3 sensores de presencia
 @app.route('/sensores', methods=['GET'])
 def get_sensores():
-    return jsonify(lecturas_sensores)
+    return jsonify(sensores_presencia)
+
+# Capturas registradas por el ESP32 (ángulo en que se tomó cada foto)
+capturas = []
+
+# Recibir aviso del ESP32 indicando el ángulo de cada captura
+@app.route('/captura', methods=['POST'])
+def nueva_captura():
+    datos = request.get_json()
+    angulo = datos.get('angulo')
+    if angulo is None:
+        return jsonify({'estado': 'error', 'mensaje': 'Falta campo angulo'}), 400
+    capturas.append({'angulo': angulo})
+    return jsonify({'estado': 'ok', 'angulo': angulo, 'total': len(capturas)})
+
+# Obtener lista de capturas registradas en el ciclo actual
+@app.route('/captura', methods=['GET'])
+def get_capturas():
+    return jsonify({'capturas': capturas, 'total': len(capturas)})
+
+# Limpiar lista de capturas (inicio de nuevo ciclo)
+@app.route('/captura', methods=['DELETE'])
+def limpiar_capturas():
+    capturas.clear()
+    return jsonify({'estado': 'ok', 'mensaje': 'Capturas reiniciadas'})
+
+# Estado del plato giratorio en memoria
+estado_plato = {
+    'girando': False,
+    'angulo_actual': 0,
+    'ciclo_completo': False
+}
+
+# Recibir estado del plato desde el ESP32
+@app.route('/plato', methods=['POST'])
+def set_plato():
+    datos = request.get_json()
+    estado_plato.update({k: datos[k] for k in ('girando', 'angulo_actual', 'ciclo_completo') if k in datos})
+    return jsonify({'estado': 'ok'})
+
+# Obtener estado actual del plato giratorio
+@app.route('/plato', methods=['GET'])
+def get_plato():
+    return jsonify(estado_plato)
 
 # ── ARRANCAR SERVIDOR ────────────────────────────────
 if __name__ == '__main__':
