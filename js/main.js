@@ -44,7 +44,7 @@ async function cargarInspecciones() {
     if (!tabla) return;
 
     if (data.length === 0) {
-      tabla.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
+      tabla.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
       return;
     }
 
@@ -61,7 +61,6 @@ async function cargarInspecciones() {
       tabla.appendChild(fila);
     });
 
-    // Actualizar métricas
     const total = data.length;
     const aprobadas = data.filter(i => i.resultado === 'APROBADA').length;
     const rechazadas = total - aprobadas;
@@ -100,68 +99,64 @@ async function cargarPiezas() {
 }
 
 // ── CARGAR SENSORES DESDE EL BACKEND ────────────────────────
+function actualizarSensorPresencia(id, presente) {
+  const dot   = document.getElementById(`${id}-dot`);
+  const texto = document.getElementById(`${id}-text`);
+  if (dot)   dot.classList.toggle('on', !!presente);
+  if (texto) texto.textContent = presente ? 'Detectado' : 'Libre';
+}
+
 async function cargarSensores() {
   try {
-    const res = await fetch(`${API}/sensores`);
+    const res  = await fetch(`${API}/sensores`);
     const data = await res.json();
-
-    document.getElementById('sensor-s1').textContent  = data.S1  !== null ? data.S1  + ' mm' : '— mm';
-    document.getElementById('sensor-s2').textContent  = data.S2  !== null ? data.S2  + ' mm' : '— mm';
-    document.getElementById('sensor-s2p').textContent = data.S2p !== null ? data.S2p + ' mm' : '— mm';
-    document.getElementById('sensor-s3').textContent  = data.S3  !== null ? data.S3  + ' mm' : '— mm';
-    document.getElementById('sensor-s3p').textContent = data.S3p !== null ? data.S3p + ' mm' : '— mm';
-
-    const resCalib = await fetch(`${API}/calibracion`);
-    const calib = await resCalib.json();
-
-    if (calib.ref_s1 && data.S1 !== null) {
-      const alto = (calib.ref_s1 - data.S1).toFixed(1);
-      document.getElementById('dim-alto').textContent = alto + ' mm';
-    }
-    if (calib.d_s2_s2p && data.S2 !== null && data.S2p !== null) {
-      const ancho = (calib.d_s2_s2p - data.S2 - data.S2p).toFixed(1);
-      document.getElementById('dim-ancho').textContent = ancho + ' mm';
-    }
-    if (calib.d_s3_s3p && data.S3 !== null && data.S3p !== null) {
-      const largo = (calib.d_s3_s3p - data.S3 - data.S3p).toFixed(1);
-      document.getElementById('dim-largo').textContent = largo + ' mm';
-    }
-
-    const alerta = document.getElementById('sensor-alerta');
-    const algunNull = Object.values(data).some(v => v === null);
-    alerta.style.display = algunNull ? 'block' : 'none';
-
+    actualizarSensorPresencia('sensor-s1', data.S1);
+    actualizarSensorPresencia('sensor-s2', data.S2);
+    actualizarSensorPresencia('sensor-s3', data.S3);
   } catch (err) {
     console.log('No se pudieron cargar los sensores');
+  }
+
+  try {
+    const res  = await fetch(`${API}/plato`);
+    const data = await res.json();
+    document.getElementById('plato-estado').textContent  = data.girando ? 'Girando' : 'Detenido';
+    document.getElementById('plato-angulo').textContent  = data.angulo_actual != null ? data.angulo_actual + '°' : '— °';
+  } catch (err) {
+    console.log('No se pudo cargar el estado del plato');
+  }
+
+  try {
+    const res    = await fetch(`${API}/captura`);
+    const data   = await res.json();
+    const angulos = (data.capturas || []).map(c => c.angulo);
+    document.getElementById('captura-cantidad').textContent = `${angulos.length} / 8`;
+    document.getElementById('captura-angulos').textContent  = angulos.length ? angulos.map(a => a + '°').join(', ') : '—';
+  } catch (err) {
+    console.log('No se pudo cargar el estado de las capturas');
   }
 }
 
 // ── CARGAR ULTIMA INSPECCION EN VIVO ────────────────────────
 async function cargarUltimaInspeccion() {
   try {
-    const res = await fetch(`${API}/inspecciones`);
+    const res  = await fetch(`${API}/inspecciones`);
     const data = await res.json();
     if (data.length === 0) return;
 
     const insp = data[0];
-
-    document.getElementById('insp-tipo').textContent     = insp.pieza || '—';
+    document.getElementById('insp-tipo').textContent     = insp.pieza    || '—';
     document.getElementById('insp-norma').textContent    = '—';
-    document.getElementById('insp-alto').textContent     = insp.alto  ? insp.alto.toFixed(1)  + ' mm' : '— mm';
-    document.getElementById('insp-ancho').textContent    = insp.ancho ? insp.ancho.toFixed(1) + ' mm' : '— mm';
-    document.getElementById('insp-largo').textContent    = insp.largo ? insp.largo.toFixed(1) + ' mm' : '— mm';
+    document.getElementById('insp-alto').textContent     = insp.alto     ? insp.alto.toFixed(1)  + ' mm' : '— mm';
+    document.getElementById('insp-ancho').textContent    = insp.ancho    ? insp.ancho.toFixed(1) + ' mm' : '— mm';
+    document.getElementById('insp-largo').textContent    = insp.largo    ? insp.largo.toFixed(1) + ' mm' : '— mm';
     document.getElementById('insp-operario').textContent = insp.operario || '—';
 
     const aprobada = insp.resultado === 'APROBADA';
-    const box    = document.getElementById('insp-resultado-box');
-    const icon   = document.getElementById('insp-resultado-icon');
-    const titulo = document.getElementById('insp-resultado-titulo');
-    const sub    = document.getElementById('insp-resultado-sub');
-
-    box.className      = aprobada ? 'result-box ok' : 'result-box fail';
-    icon.textContent   = aprobada ? '✓' : '✗';
-    titulo.textContent = insp.resultado;
-    sub.textContent    = aprobada
+    document.getElementById('insp-resultado-box').className       = aprobada ? 'result-box ok' : 'result-box fail';
+    document.getElementById('insp-resultado-icon').textContent    = aprobada ? '✓' : '✗';
+    document.getElementById('insp-resultado-titulo').textContent  = insp.resultado;
+    document.getElementById('insp-resultado-sub').textContent     = aprobada
       ? 'Todas las dimensiones dentro de tolerancia'
       : 'Una o más dimensiones fuera de tolerancia';
 
@@ -174,12 +169,12 @@ async function cargarUltimaInspeccion() {
 cargarInspecciones();
 cargarPiezas();
 cargarSensores();
-setInterval(cargarInspecciones, 5000);
-setInterval(cargarSensores, 2000);
 cargarUltimaInspeccion();
-setInterval(cargarUltimaInspeccion, 3000);
 cargarHistorial();
-setInterval(cargarHistorial, 10000);
+setInterval(cargarInspecciones,    5000);
+setInterval(cargarSensores,        2000);
+setInterval(cargarUltimaInspeccion,3000);
+setInterval(cargarHistorial,      10000);
 
 // ── GUARDAR PIEZA ──────────────────────────────────────
 async function guardarPieza() {
@@ -202,8 +197,7 @@ async function guardarPieza() {
 
   if (respuesta.ok) {
     const resultado = await respuesta.json();
-    const idPieza = resultado.id;
-    generarQR(datos.nombre, datos.norma, idPieza);
+    generarQR(datos.nombre, datos.norma, resultado.id);
     setTimeout(() => {
       alert('✅ Pieza guardada correctamente');
       toggleForm();
@@ -217,11 +211,9 @@ async function guardarPieza() {
 function generarQR(nombre, norma, id) {
   const contenedor = document.getElementById('qr-canvas');
   contenedor.innerHTML = '';
-  const texto = `DIMENSIA|${id}|${nombre}|${norma}`;
   new QRCode(contenedor, {
-    text: texto,
-    width: 80,
-    height: 80,
+    text: `DIMENSIA|${id}|${nombre}|${norma}`,
+    width: 80, height: 80,
   });
 }
 
@@ -231,22 +223,15 @@ let operarioActual = null;
 function iniciarSesion() {
   const nombre = document.getElementById('login-nombre').value.trim();
   const legajo = document.getElementById('login-legajo').value.trim();
-
-  if (!nombre || !legajo) {
-    alert('⚠️ Completá tu nombre y legajo para continuar');
-    return;
-  }
-
+  if (!nombre || !legajo) { alert('⚠️ Completá tu nombre y legajo para continuar'); return; }
   operarioActual = { nombre, legajo };
-
   fetch('http://127.0.0.1:5000/operario_activo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ operario: nombre, legajo: legajo })
   });
-
   const badge = document.getElementById('operario-badge');
-  badge.textContent = `👤 ${nombre} — Legajo ${legajo}`;
+  badge.textContent  = `👤 ${nombre} — Legajo ${legajo}`;
   badge.style.display = 'block';
   document.getElementById('login-screen').style.display = 'none';
 }
@@ -254,34 +239,25 @@ function iniciarSesion() {
 // ── EXPORTAR CSV ──────────────────────────────────────
 async function exportarCSV() {
   try {
-    const res = await fetch(`${API}/inspecciones`);
+    const res  = await fetch(`${API}/inspecciones`);
     const data = await res.json();
-
-    if (data.length === 0) {
-      alert('No hay inspecciones para exportar.');
-      return;
-    }
+    if (data.length === 0) { alert('No hay inspecciones para exportar.'); return; }
 
     const encabezado = ['#', 'Pieza', 'Alto (mm)', 'Ancho (mm)', 'Largo (mm)', 'Estado', 'Operario', 'Fecha'];
     const filas = data.map(i => [
-      i.id,
-      i.pieza     || '—',
-      i.alto      ? i.alto.toFixed(1)  : '—',
-      i.ancho     ? i.ancho.toFixed(1) : '—',
-      i.largo     ? i.largo.toFixed(1) : '—',
-      i.resultado || '—',
-      i.operario  || '—',
-      i.fecha     || '—'
+      i.id, i.pieza || '—',
+      i.alto  ? i.alto.toFixed(1)  : '—',
+      i.ancho ? i.ancho.toFixed(1) : '—',
+      i.largo ? i.largo.toFixed(1) : '—',
+      i.resultado || '—', i.operario || '—', i.fecha || '—'
     ]);
 
-    const csv = [encabezado, ...filas].map(f => f.join(',')).join('\n');
+    const csv  = [encabezado, ...filas].map(f => f.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
     a.download = 'inspecciones_dimensia.csv';
     a.click();
-
   } catch (err) {
     alert('Error al conectar con el backend para exportar.');
   }
@@ -290,8 +266,8 @@ async function exportarCSV() {
 // ── CARGAR HISTORIAL DESDE EL BACKEND ───────────────────────
 async function cargarHistorial() {
   try {
-    const res = await fetch(`${API}/inspecciones`);
-    const data = await res.json();
+    const res   = await fetch(`${API}/inspecciones`);
+    const data  = await res.json();
     const tbody = document.getElementById('historial-table');
     if (!tbody) return;
 
@@ -302,7 +278,7 @@ async function cargarHistorial() {
 
     tbody.innerHTML = '';
     data.forEach(insp => {
-      const fila = document.createElement('tr');
+      const fila  = document.createElement('tr');
       const fecha = insp.fecha ? insp.fecha.replace('T', ' ').substring(0, 16) : '—';
       fila.innerHTML = `
         <td class="mono gray">#${insp.id}</td>
@@ -316,7 +292,6 @@ async function cargarHistorial() {
       tbody.appendChild(fila);
     });
 
-    // Actualizar contador de inspecciones
     const contador = document.querySelector('#page-historial .card-title');
     if (contador) contador.textContent = `${data.length} inspecciones encontradas`;
 
@@ -327,24 +302,17 @@ async function cargarHistorial() {
 
 // ── CALIBRACION ──────────────────────────────────────
 async function iniciarCalibracion() {
-  const estado = document.getElementById('calib-estado');
+  const estado    = document.getElementById('calib-estado');
   const resultados = document.getElementById('calib-resultados');
-  const valores = document.getElementById('calib-valores');
-
+  const valores   = document.getElementById('calib-valores');
   estado.textContent = 'Conectando con el backend...';
   resultados.style.display = 'none';
-
   try {
-    const res = await fetch(`${API}/calibracion`, { method: 'POST' });
+    const res  = await fetch(`${API}/calibracion`, { method: 'POST' });
     const data = await res.json();
-
     estado.textContent = '';
-    valores.textContent =
-      `REF_S1: ${data.REF_S1} mm  |  ` +
-      `D_S2_S2p: ${data.D_S2_S2p} mm  |  ` +
-      `D_S3_S3p: ${data.D_S3_S3p} mm`;
+    valores.textContent = `REF_S1: ${data.REF_S1} mm  |  D_S2_S2p: ${data.D_S2_S2p} mm  |  D_S3_S3p: ${data.D_S3_S3p} mm`;
     resultados.style.display = 'block';
-
   } catch (err) {
     estado.textContent = 'Error: no se pudo conectar con el backend.';
   }
