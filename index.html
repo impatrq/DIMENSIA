@@ -252,52 +252,49 @@
           </div>
         </div>
 
-        <!-- ── PANEL MONITOREO 5 SENSORES ── -->
+        <!-- ── PANEL ESTADO DEL SISTEMA ── -->
         <div class="card" style="margin-top:16px">
           <div class="card-header">
-            <div class="card-title">Lecturas brutas — 5 sensores</div>
+            <div class="card-title">Estado del sistema</div>
             <span class="card-sub live-dot-wrap"><span class="live-dot"></span> En vivo</span>
           </div>
           <div class="live-rows">
             <div class="live-row">
-              <span class="live-label">S1 — Alto (superior)</span>
-              <span class="live-val mono" id="sensor-s1">— mm</span>
+              <span class="live-label">S1 — Pieza detectada en cinta</span>
+              <span class="live-val mono"><span class="sensor-dot" id="sensor-s1-dot"></span><span id="sensor-s1-text">—</span></span>
             </div>
             <div class="live-row">
-              <span class="live-label">S2 — Lateral izquierdo</span>
-              <span class="live-val mono" id="sensor-s2">— mm</span>
+              <span class="live-label">S2 — Pieza posicionada en plato</span>
+              <span class="live-val mono"><span class="sensor-dot" id="sensor-s2-dot"></span><span id="sensor-s2-text">—</span></span>
             </div>
             <div class="live-row">
-              <span class="live-label">S2' — Lateral derecho</span>
-              <span class="live-val mono" id="sensor-s2p">— mm</span>
-            </div>
-            <div class="live-row">
-              <span class="live-label">S3 — Frontal</span>
-              <span class="live-val mono" id="sensor-s3">— mm</span>
-            </div>
-            <div class="live-row">
-              <span class="live-label">S3' — Posterior</span>
-              <span class="live-val mono" id="sensor-s3p">— mm</span>
+              <span class="live-label">S3 — Pieza centrada — lista para rotar</span>
+              <span class="live-val mono"><span class="sensor-dot" id="sensor-s3-dot"></span><span id="sensor-s3-text">—</span></span>
             </div>
           </div>
           <div style="margin-top:12px;padding-top:12px;border-top:1px solid #eee">
             <div class="live-rows">
               <div class="live-row">
-                <span class="live-label"><b>Alto calculado</b></span>
-                <span class="live-val mono" id="dim-alto">— mm</span>
+                <span class="live-label"><b>Plato giratorio</b></span>
+                <span class="live-val mono" id="plato-estado">—</span>
               </div>
               <div class="live-row">
-                <span class="live-label"><b>Ancho calculado</b></span>
-                <span class="live-val mono" id="dim-ancho">— mm</span>
-              </div>
-              <div class="live-row">
-                <span class="live-label"><b>Largo calculado</b></span>
-                <span class="live-val mono" id="dim-largo">— mm</span>
+                <span class="live-label"><b>Ángulo actual</b></span>
+                <span class="live-val mono" id="plato-angulo">— °</span>
               </div>
             </div>
           </div>
-          <div id="sensor-alerta" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border-left:4px solid #DC2626;border-radius:4px;color:#DC2626;font-size:13px">
-            ⚠ Sensor con lectura inconsistente — verificar alineacion
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid #eee">
+            <div class="live-rows">
+              <div class="live-row">
+                <span class="live-label"><b>Capturas del ciclo</b></span>
+                <span class="live-val mono" id="captura-cantidad">0 / 8</span>
+              </div>
+              <div class="live-row">
+                <span class="live-label">Ángulos capturados</span>
+                <span class="live-val mono" id="captura-angulos">—</span>
+              </div>
+            </div>
           </div>
         </div>
 
