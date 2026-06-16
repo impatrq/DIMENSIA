@@ -137,6 +137,25 @@ async function cargarSensores() {
   }
 }
 
+// ── CARGAR SERVOS DESDE EL BACKEND ──────────────────────────
+async function cargarServos() {
+  try {
+    const res  = await fetch(`${API}/servos`);
+    const data = await res.json();
+    const actualizar = (id, activo) => {
+      const dot   = document.getElementById(`${id}-dot`);
+      const texto = document.getElementById(`${id}-text`);
+      if (dot)   dot.classList.toggle('on', !!activo);
+      if (texto) texto.textContent = activo ? 'Activo' : 'Inactivo';
+    };
+    actualizar('servo1', data.servo1?.activo);
+    actualizar('servo2', data.servo2?.activo);
+    actualizar('servo3', data.servo3?.activo);
+  } catch (err) {
+    console.log('No se pudieron cargar los servos');
+  }
+}
+
 // ── CARGAR ULTIMA INSPECCION EN VIVO ────────────────────────
 async function cargarUltimaInspeccion() {
   try {
@@ -171,10 +190,12 @@ cargarPiezas();
 cargarSensores();
 cargarUltimaInspeccion();
 cargarHistorial();
+cargarServos();
 setInterval(cargarInspecciones,    5000);
 setInterval(cargarSensores,        2000);
 setInterval(cargarUltimaInspeccion,3000);
 setInterval(cargarHistorial,      10000);
+setInterval(cargarServos,          2000);
 
 // ── GUARDAR PIEZA ──────────────────────────────────────
 async function guardarPieza() {
