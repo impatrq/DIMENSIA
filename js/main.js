@@ -304,14 +304,15 @@ async function cargarHistorial() {
 async function iniciarCalibracion() {
   const estado    = document.getElementById('calib-estado');
   const resultados = document.getElementById('calib-resultados');
-  const valores   = document.getElementById('calib-valores');
   estado.textContent = 'Conectando con el backend...';
   resultados.style.display = 'none';
   try {
     const res  = await fetch(`${API}/calibracion`, { method: 'POST' });
     const data = await res.json();
     estado.textContent = '';
-    valores.textContent = `REF_S1: ${data.REF_S1} mm  |  D_S2_S2p: ${data.D_S2_S2p} mm  |  D_S3_S3p: ${data.D_S3_S3p} mm`;
+    document.getElementById('calib-factor-superior').textContent = data.factor_superior != null ? `${data.factor_superior} px/mm` : '—';
+    document.getElementById('calib-factor-lateral').textContent  = data.factor_lateral  != null ? `${data.factor_lateral} px/mm`  : '—';
+    document.getElementById('calib-fecha').textContent           = data.fecha ?? '—';
     resultados.style.display = 'block';
   } catch (err) {
     estado.textContent = 'Error: no se pudo conectar con el backend.';
