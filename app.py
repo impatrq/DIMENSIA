@@ -61,16 +61,16 @@ def set_operario():
 def get_operario():
     return jsonify(operario_activo)
 
-# Guardar calibracion del sistema diferencial
+# Guardar calibracion de las camaras (factor px/mm)
 @app.route('/calibracion', methods=['POST'])
 def set_calibracion():
     datos = request.get_json()
-    guardar_calibracion(datos)
+    fecha = guardar_calibracion(datos)
     return jsonify({
         'estado': 'ok',
-        'REF_S1': datos.get('REF_S1'),
-        'D_S2_S2p': datos.get('D_S2_S2p'),
-        'D_S3_S3p': datos.get('D_S3_S3p')
+        'factor_superior': datos.get('factor_superior'),
+        'factor_lateral': datos.get('factor_lateral'),
+        'fecha': fecha
     })
 
 # Obtener ultima calibracion guardada
