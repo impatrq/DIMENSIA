@@ -10,13 +10,13 @@ def init_db():
     # Tabla de tipos de piezas
     c.execute('''
         CREATE TABLE IF NOT EXISTS piezas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL,
-            norma TEXT,
-            od_ref REAL,
-            od_tol REAL,
-            id_ref REAL,
-            id_tol REAL,
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre    TEXT NOT NULL,
+            norma     TEXT,
+            od_ref    REAL,
+            od_tol    REAL,
+            id_ref    REAL,
+            id_tol    REAL,
             largo_ref REAL,
             largo_tol REAL
         )
@@ -25,32 +25,31 @@ def init_db():
     # Tabla de inspecciones
     c.execute('''
         CREATE TABLE IF NOT EXISTS inspecciones (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            pieza TEXT NOT NULL,
-            alto REAL,
-            ancho REAL,
-            largo REAL,
-            resultado TEXT,
-            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            operario TEXT,
-            legajo TEXT,
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            pieza       TEXT NOT NULL,
+            alto        REAL,
+            ancho       REAL,
+            largo       REAL,
+            resultado   TEXT,
+            fecha       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            operario    TEXT,
+            legajo      TEXT,
             lectura_s2p REAL,
             lectura_s3p REAL
         )
     ''')
 
-    # Tabla de calibracion
+    # Tabla de calibracion de camaras (factor px/mm)
     c.execute('''
         CREATE TABLE IF NOT EXISTS calibracion (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ref_s1 REAL,
-            d_s2_s2p REAL,
-            d_s3_s3p REAL,
-            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            factor_superior  REAL,
+            factor_lateral   REAL,
+            fecha            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
-    # Cargar piezas de ejemplo si la tabla está vacía
+    # Cargar piezas de ejemplo si la tabla esta vacia
     c.execute('SELECT COUNT(*) FROM piezas')
     if c.fetchone()[0] == 0:
         piezas_ejemplo = [
@@ -59,7 +58,10 @@ def init_db():
             ('Brida DN25',     'DIN 2999',    25.8, 0.5, None, None, 42.0, 1.0),
             ('Codo 90 1/2"',  'ASME B16.11', 21.3, 0.5, None, None, 38.0, 1.0),
         ]
-        c.executemany('INSERT INTO piezas (nombre, norma, od_ref, od_tol, id_ref, id_tol, largo_ref, largo_tol) VALUES (?,?,?,?,?,?,?,?)', piezas_ejemplo)
+        c.executemany(
+            'INSERT INTO piezas (nombre, norma, od_ref, od_tol, id_ref, id_tol, largo_ref, largo_tol) VALUES (?,?,?,?,?,?,?,?)',
+            piezas_ejemplo
+        )
 
     conn.commit()
     conn.close()
@@ -133,15 +135,16 @@ def guardar_calibracion(datos):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute('''
-        INSERT INTO calibracion (ref_s1, d_s2_s2p, d_s3_s3p)
-        VALUES (?, ?, ?)
+        INSERT INTO calibracion (factor_superior, factor_lateral)
+        VALUES (?, ?)
     ''', (
-        datos.get('REF_S1'),
-        datos.get('D_S2_S2p'),
-        datos.get('D_S3_S3p')
+        datos.get('factor_superior'),
+        datos.get('factor_lateral')
     ))
     conn.commit()
+    fila = c.execute('SELECT fecha FROM calibracion WHERE id = ?', (c.lastrowid,)).fetchone()
     conn.close()
+    return fila[0] if fila else None
 
 # ── OBTENER ULTIMA CALIBRACION ───────────────────────
 def obtener_calibracion():
