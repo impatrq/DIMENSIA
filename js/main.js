@@ -87,8 +87,8 @@ async function cargarPiezas() {
       fila.innerHTML = `
         <td>${pieza.nombre}</td>
         <td class="mono">${pieza.norma || '—'}</td>
-        <td class="mono">${pieza.od_ref ? pieza.od_ref + ' mm' : '—'}</td>
-        <td class="mono">${pieza.id_ref ? pieza.id_ref + ' mm' : '—'}</td>
+        <td class="mono">${pieza.alto_ref ? pieza.alto_ref + ' mm' : '—'}</td>
+        <td class="mono">${pieza.ancho_ref ? pieza.ancho_ref + ' mm' : '—'}</td>
         <td><span class="pill pend" style="cursor:pointer">editar</span></td>
       `;
       tbody.appendChild(fila);
@@ -202,10 +202,10 @@ async function guardarPieza() {
   const datos = {
     nombre:    document.getElementById('pieza-nombre').value,
     norma:     document.getElementById('pieza-norma').value,
-    od_ref:    parseFloat(document.getElementById('pieza-od-ref').value),
-    od_tol:    parseFloat(document.getElementById('pieza-od-tol').value),
-    id_ref:    parseFloat(document.getElementById('pieza-id-ref').value),
-    id_tol:    parseFloat(document.getElementById('pieza-id-tol').value),
+    alto_ref:  parseFloat(document.getElementById('pieza-alto-ref').value),
+    alto_tol:  parseFloat(document.getElementById('pieza-alto-tol').value),
+    ancho_ref: parseFloat(document.getElementById('pieza-ancho-ref').value),
+    ancho_tol: parseFloat(document.getElementById('pieza-ancho-tol').value),
     largo_ref: parseFloat(document.getElementById('pieza-largo-ref').value),
     largo_tol: parseFloat(document.getElementById('pieza-largo-tol').value),
   };
