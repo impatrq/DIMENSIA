@@ -10,15 +10,15 @@ def init_db():
     # Tabla de tipos de piezas
     c.execute('''
         CREATE TABLE IF NOT EXISTS piezas (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre    TEXT NOT NULL,
-            norma     TEXT,
-            od_ref    REAL,
-            od_tol    REAL,
-            id_ref    REAL,
-            id_tol    REAL,
-            largo_ref REAL,
-            largo_tol REAL
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre     TEXT NOT NULL,
+            norma      TEXT,
+            alto_ref   REAL,
+            alto_tol   REAL,
+            ancho_ref  REAL,
+            ancho_tol  REAL,
+            largo_ref  REAL,
+            largo_tol  REAL
         )
     ''')
 
@@ -53,13 +53,13 @@ def init_db():
     c.execute('SELECT COUNT(*) FROM piezas')
     if c.fetchone()[0] == 0:
         piezas_ejemplo = [
-            ('Niple NPT 1/2"', 'ASME B16.11', 21.3, 0.5, 14.0, 0.5, 58.0, 1.0),
-            ('Union NPT 3/4"', 'ASME B16.11', 26.7, 0.5, 18.0, 0.5, 65.0, 1.0),
-            ('Brida DN25',     'DIN 2999',    25.8, 0.5, None, None, 42.0, 1.0),
-            ('Codo 90 1/2"',  'ASME B16.11', 21.3, 0.5, None, None, 38.0, 1.0),
+            ('Niple NPT 1/2"', 'ASME B16.11', 21.3, 0.5, 26.7, 0.5, 58.0, 1.0),
+            ('Union NPT 3/4"', 'ASME B16.11', 26.7, 0.5, 33.4, 0.5, 65.0, 1.0),
+            ('Brida DN25',     'DIN 2999',    12.0, 0.5, 115.0, 1.0, 42.0, 1.0),
+            ('Codo 90 1/2"',  'ASME B16.11', 21.3, 0.5, 26.7, 0.5, 38.0, 1.0),
         ]
         c.executemany(
-            'INSERT INTO piezas (nombre, norma, od_ref, od_tol, id_ref, id_tol, largo_ref, largo_tol) VALUES (?,?,?,?,?,?,?,?)',
+            'INSERT INTO piezas (nombre, norma, alto_ref, alto_tol, ancho_ref, ancho_tol, largo_ref, largo_tol) VALUES (?,?,?,?,?,?,?,?)',
             piezas_ejemplo
         )
 
@@ -103,15 +103,15 @@ def guardar_pieza(datos):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute('''
-        INSERT INTO piezas (nombre, norma, od_ref, od_tol, id_ref, id_tol, largo_ref, largo_tol)
+        INSERT INTO piezas (nombre, norma, alto_ref, alto_tol, ancho_ref, ancho_tol, largo_ref, largo_tol)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         datos.get('nombre'),
         datos.get('norma'),
-        datos.get('od_ref'),
-        datos.get('od_tol'),
-        datos.get('id_ref'),
-        datos.get('id_tol'),
+        datos.get('alto_ref'),
+        datos.get('alto_tol'),
+        datos.get('ancho_ref'),
+        datos.get('ancho_tol'),
         datos.get('largo_ref'),
         datos.get('largo_tol')
     ))
