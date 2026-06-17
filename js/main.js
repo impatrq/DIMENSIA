@@ -322,19 +322,31 @@ async function cargarHistorial() {
 }
 
 // ── CALIBRACION ──────────────────────────────────────
-async function iniciarCalibracion() {
-  const estado    = document.getElementById('calib-estado');
+async function verCalibracion() {
+  const estado     = document.getElementById('calib-estado');
   const resultados = document.getElementById('calib-resultados');
-  estado.textContent = 'Conectando con el backend...';
+  const factorSup  = document.getElementById('calib-factor-superior');
+  const factorLat  = document.getElementById('calib-factor-lateral');
+  const fecha      = document.getElementById('calib-fecha');
+
+  estado.textContent = 'Consultando backend...';
   resultados.style.display = 'none';
+
   try {
-    const res  = await fetch(`${API}/calibracion`, { method: 'POST' });
+    const res  = await fetch(`${API}/calibracion`);
     const data = await res.json();
+
+    if (!data || Object.keys(data).length === 0) {
+      estado.textContent = 'Sin calibracion registrada aun.';
+      return;
+    }
+
     estado.textContent = '';
-    document.getElementById('calib-factor-superior').textContent = data.factor_superior != null ? `${data.factor_superior} px/mm` : '—';
-    document.getElementById('calib-factor-lateral').textContent  = data.factor_lateral  != null ? `${data.factor_lateral} px/mm`  : '—';
-    document.getElementById('calib-fecha').textContent           = data.fecha ?? '—';
+    if (factorSup) factorSup.textContent = data.factor_superior != null ? data.factor_superior + ' px/mm' : '—';
+    if (factorLat) factorLat.textContent = data.factor_lateral  != null ? data.factor_lateral  + ' px/mm' : '—';
+    if (fecha)     fecha.textContent     = data.fecha ?? '—';
     resultados.style.display = 'block';
+
   } catch (err) {
     estado.textContent = 'Error: no se pudo conectar con el backend.';
   }
