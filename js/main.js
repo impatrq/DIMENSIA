@@ -68,6 +68,22 @@ async function cargarInspecciones() {
     document.querySelector('.metric-value.green').textContent = aprobadas;
     document.querySelector('.metric-value.red').textContent = rechazadas;
 
+    // ── ALERTA DE RACHA DE RECHAZOS ──────────────────
+    const alerta = document.getElementById('alerta-racha');
+    const alertaTexto = document.getElementById('alerta-racha-texto');
+    if (alerta && alertaTexto) {
+      const ultimas3 = data.slice(0, 3);
+      const rachaRechazos = ultimas3.length === 3 && ultimas3.every(i => i.resultado === 'RECHAZADA');
+      if (rachaRechazos) {
+        const pieza = data[0].pieza || 'pieza desconocida';
+        alertaTexto.innerHTML = `<strong>⚠ Alerta:</strong> Las últimas 3 inspecciones de <strong>${pieza}</strong> fueron RECHAZADAS. Detener producción y revisar herramienta.`;
+        alerta.style.display = 'flex';
+      } else {
+        alertaTexto.innerHTML = '';
+        alerta.style.display = 'none';
+      }
+    }
+
   } catch (err) {
     console.log('Backend no disponible, mostrando datos de ejemplo');
   }
