@@ -276,21 +276,9 @@ function iniciarSesion() {
 // ── EXPORTAR CSV ──────────────────────────────────────
 async function exportarCSV() {
   try {
-    const res  = await fetch(`${API}/inspecciones`);
-    const data = await res.json();
-    if (data.length === 0) { alert('No hay inspecciones para exportar.'); return; }
-
-    const encabezado = ['#', 'Pieza', 'Alto (mm)', 'Ancho (mm)', 'Largo (mm)', 'Estado', 'Operario', 'Fecha'];
-    const filas = data.map(i => [
-      i.id, i.pieza || '—',
-      i.alto  ? i.alto.toFixed(1)  : '—',
-      i.ancho ? i.ancho.toFixed(1) : '—',
-      i.largo ? i.largo.toFixed(1) : '—',
-      i.resultado || '—', i.operario || '—', i.fecha || '—'
-    ]);
-
-    const csv  = 'sep=;\n' + [encabezado, ...filas].map(f => f.join(';')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const res = await fetch(`${API}/exportar`);
+    if (!res.ok) { alert('No hay inspecciones para exportar.'); return; }
+    const blob = await res.blob();
     const a    = document.createElement('a');
     a.href     = URL.createObjectURL(blob);
     a.download = 'inspecciones_dimensia.csv';
