@@ -43,8 +43,8 @@ def init_db():
     c.execute('''
         CREATE TABLE IF NOT EXISTS calibracion (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
-            factor_superior  REAL,
-            factor_lateral   REAL,
+            px_por_mm_superior  REAL,
+            px_por_mm_lateral   REAL,
             fecha            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -135,11 +135,11 @@ def guardar_calibracion(datos):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute('''
-        INSERT INTO calibracion (factor_superior, factor_lateral)
+        INSERT INTO calibracion (px_por_mm_superior, px_por_mm_lateral)
         VALUES (?, ?)
     ''', (
-        datos.get('factor_superior'),
-        datos.get('factor_lateral')
+        datos.get('px_por_mm_superior'),
+        datos.get('px_por_mm_lateral')
     ))
     conn.commit()
     fila = c.execute('SELECT fecha FROM calibracion WHERE id = ?', (c.lastrowid,)).fetchone()
