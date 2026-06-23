@@ -70,8 +70,8 @@ def set_calibracion():
     fecha = guardar_calibracion(datos)
     return jsonify({
         'estado': 'ok',
-        'factor_superior': datos.get('factor_superior'),
-        'factor_lateral': datos.get('factor_lateral'),
+        'px_por_mm_superior': datos.get('px_por_mm_superior'),
+        'px_por_mm_lateral': datos.get('px_por_mm_lateral'),
         'fecha': fecha
     })
 
