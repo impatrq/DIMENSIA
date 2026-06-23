@@ -289,7 +289,7 @@ async function exportarCSV() {
       i.resultado || '—', i.operario || '—', i.fecha || '—'
     ]);
 
-    const csv  = [encabezado, ...filas].map(f => f.join(',')).join('\n');
+    const csv  = 'sep=;\n' + [encabezado, ...filas].map(f => f.join(';')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const a    = document.createElement('a');
     a.href     = URL.createObjectURL(blob);
