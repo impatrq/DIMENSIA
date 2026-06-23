@@ -1,4 +1,6 @@
-from flask import Flask, jsonify, request
+import io
+import csv
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas, guardar_pieza, guardar_calibracion, obtener_calibracion
 
@@ -164,6 +166,31 @@ def set_servos():
 @app.route('/servos', methods=['GET'])
 def get_servos():
     return jsonify(estado_servos)
+
+# ── EXPORTAR CSV ────────────────────────────────────
+@app.route('/exportar', methods=['GET'])
+def exportar_csv():
+    inspecciones = obtener_inspecciones()
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';')
+    output.write('sep=;\n')
+    writer.writerow(['#', 'Pieza', 'Alto (mm)', 'Ancho (mm)', 'Largo (mm)', 'Estado', 'Operario', 'Fecha'])
+    for i in inspecciones:
+        writer.writerow([
+            i.get('id', ''),
+            i.get('pieza', '—'),
+            f"{i['alto']:.1f}" if i.get('alto') else '—',
+            f"{i['ancho']:.1f}" if i.get('ancho') else '—',
+            f"{i['largo']:.1f}" if i.get('largo') else '—',
+            i.get('resultado', '—'),
+            i.get('operario', '—'),
+            i.get('fecha', '—')
+        ])
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=inspecciones_dimensia.csv'}
+    )
 
 # ── ARRANCAR SERVIDOR ────────────────────────────────
 if __name__ == '__main__':
