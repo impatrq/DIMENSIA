@@ -16,6 +16,8 @@ from reportes.generador import GeneradorReportes
 
 _URL_BACKEND = "http://localhost:5000"
 
+DELAY_ENTRE_INSPECCIONES = 5  # segundos entre inspecciones para que el dashboard se vea fluido
+
 
 def actualizar_estado_dashboard(n_inspeccion, resultado):
     """
@@ -197,10 +199,13 @@ def simular_sesion(n_inspecciones=10):
         # Actualizar los widgets del dashboard con el estado de esta inspección
         actualizar_estado_dashboard(i, resultado)
 
+        # Pausa entre inspecciones — no aplicar después de la última
+        if i < n_inspecciones:
+            print("Esperando {}s...".format(DELAY_ENTRE_INSPECCIONES))
+            time.sleep(DELAY_ENTRE_INSPECCIONES)
+
         # Línea divisora entre inspecciones
         print("─" * 50)
-
-        time.sleep(1)
 
     # Resumen final
     tasa         = round(rechazadas / n_inspecciones * 100)
