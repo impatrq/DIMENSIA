@@ -330,26 +330,59 @@ async function cargarCalibracion() {
   const tbody = document.getElementById('calibracion-table');
   if (!tbody) return;
 
-  tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#9AA3B8;padding:16px">Consultando backend...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">Consultando backend...</td></tr>';
 
   try {
-    const res  = await fetch(`${API}/calibracion`);
-    const data = await res.json();
+    let calibraciones = [];
 
-    if (!data || Object.keys(data).length === 0) {
-      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#9AA3B8;padding:16px">Sin calibraciones registradas</td></tr>';
+    try {
+      const res = await fetch(`${API}/calibraciones`);
+      const data = await res.json();
+      calibraciones = Array.isArray(data) ? data.slice(0, 5) : [];
+    } catch (_) {
+      const res = await fetch(`${API}/calibracion`);
+      const data = await res.json();
+      if (data && Object.keys(data).length > 0) calibraciones = [data];
+    }
+
+    if (calibraciones.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">Sin calibraciones registradas</td></tr>';
       return;
     }
 
-    const fecha = data.fecha ? data.fecha.replace('T', ' ').substring(0, 19) : '—';
-    tbody.innerHTML = `
-      <tr>
+    tbody.innerHTML = '';
+    calibraciones.forEach(cal => {
+      const fecha = cal.fecha ? cal.fecha.replace('T', ' ').substring(0, 19) : '—';
+      const sup = cal.px_por_mm_superior;
+      const lat = cal.px_por_mm_lateral;
+
+      let consistenciaHTML = '—';
+      if (sup != null && lat != null) {
+        const diff = Math.abs(sup - lat);
+        consistenciaHTML = diff < 0.5
+          ? '<span class="pill ok">OK</span>'
+          : '<span class="pill" style="background:#FEF3C7;color:#92400E">Revisar</span>';
+      }
+
+      let vigenciaHTML = '—';
+      if (cal.fecha) {
+        const horasDesde = (Date.now() - new Date(cal.fecha).getTime()) / 3600000;
+        vigenciaHTML = horasDesde < 24
+          ? '<span class="pill ok">Vigente</span>'
+          : '<span class="pill fail">Vencida</span>';
+      }
+
+      const fila = document.createElement('tr');
+      fila.innerHTML = `
         <td class="gray small">${fecha}</td>
-        <td class="mono">${data.factor_superior != null ? data.factor_superior + ' px/mm' : '—'}</td>
-        <td class="mono">${data.factor_lateral != null ? data.factor_lateral + ' px/mm' : '—'}</td>
-      </tr>
-    `;
+        <td class="mono">${sup != null ? sup + ' px/mm' : '—'}</td>
+        <td class="mono">${lat != null ? lat + ' px/mm' : '—'}</td>
+        <td>${consistenciaHTML}</td>
+        <td>${vigenciaHTML}</td>
+      `;
+      tbody.appendChild(fila);
+    });
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#9AA3B8;padding:16px">Error: no se pudo conectar con el backend</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">Error: no se pudo conectar con el backend</td></tr>';
   }
 }
