@@ -326,32 +326,30 @@ async function cargarHistorial() {
 }
 
 // ── CALIBRACION ──────────────────────────────────────
-async function verCalibracion() {
-  const estado     = document.getElementById('calib-estado');
-  const resultados = document.getElementById('calib-resultados');
-  const factorSup  = document.getElementById('calib-factor-superior');
-  const factorLat  = document.getElementById('calib-factor-lateral');
-  const fecha      = document.getElementById('calib-fecha');
+async function cargarCalibracion() {
+  const tbody = document.getElementById('calibracion-table');
+  if (!tbody) return;
 
-  estado.textContent = 'Consultando backend...';
-  resultados.style.display = 'none';
+  tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#9AA3B8;padding:16px">Consultando backend...</td></tr>';
 
   try {
     const res  = await fetch(`${API}/calibracion`);
     const data = await res.json();
 
     if (!data || Object.keys(data).length === 0) {
-      estado.textContent = 'Sin calibracion registrada aun.';
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#9AA3B8;padding:16px">Sin calibraciones registradas</td></tr>';
       return;
     }
 
-    estado.textContent = '';
-    if (factorSup) factorSup.textContent = data.factor_superior != null ? data.factor_superior + ' px/mm' : '—';
-    if (factorLat) factorLat.textContent = data.factor_lateral  != null ? data.factor_lateral  + ' px/mm' : '—';
-    if (fecha)     fecha.textContent     = data.fecha ?? '—';
-    resultados.style.display = 'block';
-
+    const fecha = data.fecha ? data.fecha.replace('T', ' ').substring(0, 19) : '—';
+    tbody.innerHTML = `
+      <tr>
+        <td class="gray small">${fecha}</td>
+        <td class="mono">${data.factor_superior != null ? data.factor_superior + ' px/mm' : '—'}</td>
+        <td class="mono">${data.factor_lateral != null ? data.factor_lateral + ' px/mm' : '—'}</td>
+      </tr>
+    `;
   } catch (err) {
-    estado.textContent = 'Error: no se pudo conectar con el backend.';
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#9AA3B8;padding:16px">Error: no se pudo conectar con el backend</td></tr>';
   }
 }
