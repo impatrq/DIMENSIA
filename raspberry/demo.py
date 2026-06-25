@@ -136,6 +136,7 @@ def simular_sesion(n_inspecciones=10):
 
     # Registrar el momento de inicio para calcular la duración al final
     inicio = time.time()
+    print("Inicio de sesion: {}".format(datetime.now().strftime("%H:%M:%S")))
 
     # Elegir una pieza al azar para toda la sesión
     pieza = random.choice(PIEZAS)
@@ -220,6 +221,7 @@ def simular_sesion(n_inspecciones=10):
     tasa         = round(rechazadas / n_inspecciones * 100)
     tiempo_total = round(time.time() - inicio, 1)
     print("-" * 55)
+    print("Fin de sesion:   {}".format(datetime.now().strftime("%H:%M:%S")))
     print("Total: {}  |  Aprobadas: {}  |  Rechazadas: {}  |  Tasa de rechazo: {}%  |  Tiempo: {} segundos".format(
         n_inspecciones, aprobadas, rechazadas, tasa, tiempo_total,
     ))
