@@ -155,3 +155,13 @@ def obtener_calibracion():
     fila = c.fetchone()
     conn.close()
     return dict(fila) if fila else {}
+
+# ── OBTENER ULTIMAS 5 CALIBRACIONES ─────────────────
+def obtener_calibraciones():
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute('SELECT id, px_por_mm_superior, px_por_mm_lateral, fecha FROM calibracion ORDER BY fecha DESC LIMIT 5')
+    filas = [dict(f) for f in c.fetchall()]
+    conn.close()
+    return filas
