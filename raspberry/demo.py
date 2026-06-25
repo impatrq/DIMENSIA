@@ -8,6 +8,7 @@ import random
 import json
 import os
 import sys
+from datetime import datetime
 
 # Agregar el directorio actual al path para importar módulos del proyecto
 sys.path.insert(0, os.path.dirname(__file__))
@@ -17,6 +18,12 @@ from reportes.generador import GeneradorReportes
 _URL_BACKEND = "http://localhost:5000"
 
 DELAY_ENTRE_INSPECCIONES = 5  # segundos entre inspecciones para que el dashboard se vea fluido
+
+
+def generar_numero_serie(n_inspeccion):
+    """Genera un número de serie único con formato DIM-{AAAAMMDD}-{NNN}."""
+    fecha = datetime.now().strftime("%Y%m%d")
+    return "DIM-{}-{:03d}".format(fecha, n_inspeccion)
 
 
 def actualizar_estado_dashboard(n_inspeccion, resultado):
@@ -155,8 +162,9 @@ def simular_sesion(n_inspecciones=10):
         if i == 4:
             print(">>> A partir de aca se simulan 3 rechazos seguidos para mostrar la alerta del dashboard <<<")
 
-        dimensiones = generar_medicion(pieza, forzar_rechazo)
-        resultado   = evaluar(dimensiones, pieza)
+        dimensiones   = generar_medicion(pieza, forzar_rechazo)
+        resultado     = evaluar(dimensiones, pieza)
+        numero_serie  = generar_numero_serie(i)
 
         if resultado == "APROBADA":
             aprobadas += 1
@@ -164,13 +172,14 @@ def simular_sesion(n_inspecciones=10):
             rechazadas += 1
 
         payload = {
-            "pieza":     pieza["nombre"],
-            "alto":      dimensiones["alto"],
-            "ancho":     dimensiones["ancho"],
-            "largo":     dimensiones["largo"],
-            "resultado": resultado,
-            "operario":  "Demo",
-            "legajo":    "0000",
+            "pieza":         pieza["nombre"],
+            "alto":          dimensiones["alto"],
+            "ancho":         dimensiones["ancho"],
+            "largo":         dimensiones["largo"],
+            "resultado":     resultado,
+            "operario":      "Demo",
+            "legajo":        "0000",
+            "numero_serie":  numero_serie,
         }
 
         # Enviar al backend — si no está disponible, continuar igual
@@ -179,8 +188,8 @@ def simular_sesion(n_inspecciones=10):
         except Exception:
             pass
 
-        # Imprimir encabezado con número de inspección y resultado global
-        print("#{:02d}  {} | {}".format(i, resultado, pieza["nombre"]))
+        # Imprimir encabezado con número de inspección, resultado y número de serie
+        print("#{:02d}  {} | {} | {}".format(i, resultado, pieza["nombre"], numero_serie))
 
         # Imprimir detalle de cada dimensión con referencia, diferencia y estado
         for nombre_dim, valor, ref, tol in [
