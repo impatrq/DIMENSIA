@@ -25,17 +25,18 @@ def init_db():
     # Tabla de inspecciones
     c.execute('''
         CREATE TABLE IF NOT EXISTS inspecciones (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            pieza       TEXT NOT NULL,
-            alto        REAL,
-            ancho       REAL,
-            largo       REAL,
-            resultado   TEXT,
-            fecha       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            operario    TEXT,
-            legajo      TEXT,
-            lectura_s2p REAL,
-            lectura_s3p REAL
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            pieza        TEXT NOT NULL,
+            numero_serie TEXT,
+            alto         REAL,
+            ancho        REAL,
+            largo        REAL,
+            resultado    TEXT,
+            fecha        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            operario     TEXT,
+            legajo       TEXT,
+            lectura_s2p  REAL,
+            lectura_s3p  REAL
         )
     ''')
 
@@ -72,10 +73,11 @@ def guardar_inspeccion(datos):
     c = conn.cursor()
     c.execute('''
         INSERT INTO inspecciones
-          (pieza, alto, ancho, largo, resultado, operario, legajo, lectura_s2p, lectura_s3p)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (pieza, numero_serie, alto, ancho, largo, resultado, operario, legajo, lectura_s2p, lectura_s3p)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         datos.get('pieza'),
+        datos.get('numero_serie'),
         datos.get('alto'),
         datos.get('ancho'),
         datos.get('largo'),
