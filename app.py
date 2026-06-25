@@ -2,7 +2,7 @@ import io
 import csv
 from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
-from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas, guardar_pieza, guardar_calibracion, obtener_calibracion
+from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas, guardar_pieza, guardar_calibracion, obtener_calibracion, obtener_calibraciones
 
 app = Flask(__name__) 
 CORS(app)
@@ -80,6 +80,12 @@ def set_calibracion():
 def get_calibracion():
     calibracion = obtener_calibracion()
     return jsonify(calibracion)
+
+# Obtener ultimas 5 calibraciones
+@app.route('/calibraciones', methods=['GET'])
+def get_calibraciones():
+    calibraciones = obtener_calibraciones()
+    return jsonify(calibraciones)
 
 # Estado de los 3 sensores de presencia (booleanos)
 # S1: pieza llegó a la zona → detiene cinta
