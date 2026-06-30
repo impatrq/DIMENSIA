@@ -165,7 +165,11 @@ def set_servos():
     datos = request.get_json()
     for key in ('servo1', 'servo2', 'servo3'):
         if key in datos:
-            estado_servos[key]['activo'] = bool(datos[key])
+            valor = datos[key]
+            if isinstance(valor, str):
+                estado_servos[key]['activo'] = valor.lower() == 'activo'
+            else:
+                estado_servos[key]['activo'] = bool(valor)
     return jsonify({'estado': 'ok'})
 
 # Obtener estado actual de los 3 servos
