@@ -297,7 +297,7 @@ async function cargarHistorial() {
     if (!tbody) return;
 
     if (data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
       return;
     }
 
@@ -308,6 +308,7 @@ async function cargarHistorial() {
       fila.innerHTML = `
         <td class="mono gray">#${insp.id}</td>
         <td>${insp.pieza || '—'}</td>
+        <td class="mono">${insp.numero_serie || '—'}</td>
         <td class="mono">${insp.alto  ? insp.alto.toFixed(1)  : '—'}</td>
         <td class="mono">${insp.ancho ? insp.ancho.toFixed(1) : '—'}</td>
         <td class="mono">${insp.largo ? insp.largo.toFixed(1) : '—'}</td>
