@@ -67,6 +67,16 @@ def actualizar_estado_dashboard(n_inspeccion, resultado):
 
 _RUTA_REPORTE = os.path.join(os.path.dirname(__file__), "reportes", "demo_reporte.pdf")
 
+
+def verificar_backend():
+    """Verifica que el servidor Flask esté respondiendo antes de arrancar la demo."""
+    try:
+        respuesta = requests.get(_URL_BACKEND + "/", timeout=2)
+        return respuesta.status_code == 200
+    except Exception:
+        return False
+
+
 # ─── Piezas de ejemplo ────────────────────────────────────────────────────────
 
 PIEZAS = [
@@ -133,6 +143,12 @@ def simular_sesion(n_inspecciones=10):
     print("=" * 55)
     print("  DIMENSIA — Simulacion de sesion")
     print("=" * 55)
+
+    # Verificar que el backend esté disponible antes de arrancar
+    if not verificar_backend():
+        print("[ERROR] El backend no responde en {}".format(_URL_BACKEND))
+        print("Verificá que app.py esté corriendo antes de iniciar la demo.")
+        return
 
     # Registrar el momento de inicio para calcular la duración al final
     inicio = time.time()
