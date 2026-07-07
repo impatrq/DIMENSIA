@@ -135,7 +135,7 @@ def evaluar(dimensiones, pieza):
     return "APROBADA" if (alto_ok and ancho_ok) else "RECHAZADA"
 
 
-def simular_sesion(n_inspecciones=10):
+def simular_sesion(n_inspecciones=10, operario="Demo"):
     """
     Simula una sesión completa: elige una pieza, genera inspecciones,
     las envía al backend, muestra resultados y genera un reporte PDF al final.
@@ -153,6 +153,7 @@ def simular_sesion(n_inspecciones=10):
     # Registrar el momento de inicio para calcular la duración al final
     inicio = time.time()
     print("Inicio de sesion: {}".format(datetime.now().strftime("%H:%M:%S")))
+    print("Operario: {}".format(operario))
 
     # Elegir una pieza al azar para toda la sesión
     pieza = random.choice(PIEZAS)
@@ -194,7 +195,7 @@ def simular_sesion(n_inspecciones=10):
             "ancho":         dimensiones["ancho"],
             "largo":         dimensiones["largo"],
             "resultado":     resultado,
-            "operario":      "Demo",
+            "operario":      operario,
             "legajo":        "0000",
             "numero_serie":  numero_serie,
         }
@@ -272,4 +273,11 @@ if __name__ == "__main__":
         limpiar_inspecciones_demo(db)
         db.cerrar()
 
-    simular_sesion(10)
+    # Leer --operario "Nombre Apellido" si se pasa como argumento
+    operario = "Demo"
+    if "--operario" in sys.argv:
+        idx = sys.argv.index("--operario")
+        if idx + 1 < len(sys.argv):
+            operario = sys.argv[idx + 1]
+
+    simular_sesion(10, operario=operario)
