@@ -184,11 +184,12 @@ def exportar_csv():
     output = io.StringIO()
     writer = csv.writer(output, delimiter=';')
     output.write('sep=;\n')
-    writer.writerow(['#', 'Pieza', 'Alto (mm)', 'Ancho (mm)', 'Largo (mm)', 'Estado', 'Operario', 'Fecha'])
+    writer.writerow(['#', 'Pieza', 'N° Serie', 'Alto (mm)', 'Ancho (mm)', 'Largo (mm)', 'Estado', 'Operario', 'Fecha'])
     for i in inspecciones:
         writer.writerow([
             i.get('id', ''),
             i.get('pieza', '—'),
+            i.get('numero_serie', '—'),
             f"{i['alto']:.1f}" if i.get('alto') else '—',
             f"{i['ancho']:.1f}" if i.get('ancho') else '—',
             f"{i['largo']:.1f}" if i.get('largo') else '—',
