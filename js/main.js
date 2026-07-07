@@ -290,18 +290,39 @@ async function exportarCSV() {
 }
 
 // ── CARGAR HISTORIAL DESDE EL BACKEND ───────────────────────
+let historialData = [];
+
 async function cargarHistorial() {
   try {
-    const res   = await fetch(`${API}/inspecciones`);
-    const data  = await res.json();
-    const tbody = document.getElementById('historial-table');
-    if (!tbody) return;
+    const res  = await fetch(`${API}/inspecciones`);
+    const data = await res.json();
+    historialData = Array.isArray(data) ? data : [];
+    filtrarHistorial();
+  } catch (err) {
+    console.log('No se pudo cargar el historial');
+  }
+}
 
-    if (data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
-      return;
-    }
+// ── FILTRAR HISTORIAL POR N° DE SERIE (tiempo real, case-insensitive) ──
+function filtrarHistorial() {
+  const input   = document.getElementById('filtro-serie');
+  const busqueda = input ? input.value.trim().toLowerCase() : '';
 
+  const data = busqueda
+    ? historialData.filter(insp =>
+        (insp.numero_serie || '').toLowerCase().includes(busqueda))
+    : historialData;
+
+  renderHistorial(data);
+}
+
+function renderHistorial(data) {
+  const tbody = document.getElementById('historial-table');
+  if (!tbody) return;
+
+  if (data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
+  } else {
     tbody.innerHTML = '';
     data.forEach(insp => {
       const fila  = document.createElement('tr');
@@ -318,13 +339,10 @@ async function cargarHistorial() {
       `;
       tbody.appendChild(fila);
     });
-
-    const contador = document.querySelector('#page-historial .card-title');
-    if (contador) contador.textContent = `${data.length} inspecciones encontradas`;
-
-  } catch (err) {
-    console.log('No se pudo cargar el historial');
   }
+
+  const contador = document.querySelector('#page-historial .card-title');
+  if (contador) contador.textContent = `${data.length} inspecciones encontradas`;
 }
 
 // ── CALIBRACION ──────────────────────────────────────
