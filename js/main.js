@@ -181,6 +181,7 @@ async function cargarUltimaInspeccion() {
 
     const insp = data[0];
     document.getElementById('insp-tipo').textContent     = insp.pieza    || '—';
+    document.getElementById('insp-numero-serie').textContent = insp.numero_serie || '—';
     document.getElementById('insp-norma').textContent    = '—';
     document.getElementById('insp-alto').textContent     = insp.alto     ? insp.alto.toFixed(1)  + ' mm' : '— mm';
     document.getElementById('insp-ancho').textContent    = insp.ancho    ? insp.ancho.toFixed(1) + ' mm' : '— mm';
