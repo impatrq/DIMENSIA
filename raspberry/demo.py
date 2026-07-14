@@ -20,6 +20,16 @@ _URL_BACKEND = "http://localhost:5000"
 DELAY_ENTRE_INSPECCIONES = 5  # segundos entre inspecciones para que el dashboard se vea fluido
 
 
+def mostrar_bienvenida():
+    """Imprime el banner de presentación del sistema al inicio de la demo."""
+    print("=" * 50)
+    print("        DIMENSIA")
+    print("  Sistema de Inspeccion Dimensional Automatizada")
+    print("  EET N°7 — Taller Regional Quilmes")
+    print("  Especialidad Avionica")
+    print("=" * 50)
+
+
 def generar_numero_serie(n_inspeccion):
     """Genera un número de serie único con formato DIM-{AAAAMMDD}-{NNN}."""
     fecha = datetime.now().strftime("%Y%m%d")
@@ -267,6 +277,8 @@ def limpiar_inspecciones_demo(db):
 
 
 if __name__ == "__main__":
+    mostrar_bienvenida()
+
     # --reset limpia los datos de demos anteriores antes de correr una sesión nueva
     if "--reset" in sys.argv:
         db = BaseDatos()
