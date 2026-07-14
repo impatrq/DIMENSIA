@@ -1,6 +1,12 @@
 import sqlite3
+from datetime import datetime, timezone, timedelta
 
 DB = 'dimensia.db'
+
+TZ_ARG = timezone(timedelta(hours=-3))
+
+def fecha_arg():
+    return datetime.now(TZ_ARG).strftime('%Y-%m-%d %H:%M:%S')
 
 # ── INICIALIZAR BASE DE DATOS ────────────────────────
 def init_db():
@@ -32,7 +38,7 @@ def init_db():
             ancho        REAL,
             largo        REAL,
             resultado    TEXT,
-            fecha        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            fecha        TIMESTAMP,
             operario     TEXT,
             legajo       TEXT,
             lectura_s2p  REAL,
@@ -46,7 +52,7 @@ def init_db():
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
             px_por_mm_superior  REAL,
             px_por_mm_lateral   REAL,
-            fecha            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            fecha            TIMESTAMP
         )
     ''')
 
@@ -73,8 +79,8 @@ def guardar_inspeccion(datos):
     c = conn.cursor()
     c.execute('''
         INSERT INTO inspecciones
-          (pieza, numero_serie, alto, ancho, largo, resultado, operario, legajo, lectura_s2p, lectura_s3p)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (pieza, numero_serie, alto, ancho, largo, resultado, fecha, operario, legajo, lectura_s2p, lectura_s3p)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         datos.get('pieza'),
         datos.get('numero_serie'),
@@ -82,6 +88,7 @@ def guardar_inspeccion(datos):
         datos.get('ancho'),
         datos.get('largo'),
         datos.get('resultado'),
+        fecha_arg(),
         datos.get('operario'),
         datos.get('legajo'),
         datos.get('lectura_s2p'),
@@ -137,11 +144,12 @@ def guardar_calibracion(datos):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute('''
-        INSERT INTO calibracion (px_por_mm_superior, px_por_mm_lateral)
-        VALUES (?, ?)
+        INSERT INTO calibracion (px_por_mm_superior, px_por_mm_lateral, fecha)
+        VALUES (?, ?, ?)
     ''', (
         datos.get('px_por_mm_superior'),
-        datos.get('px_por_mm_lateral')
+        datos.get('px_por_mm_lateral'),
+        fecha_arg()
     ))
     conn.commit()
     fila = c.execute('SELECT fecha FROM calibracion WHERE id = ?', (c.lastrowid,)).fetchone()
