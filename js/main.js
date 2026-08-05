@@ -13,6 +13,7 @@ function showPage(id, el) {
     reportes:   'Reportes',
   };
   document.getElementById('page-title').textContent = titles[id] || id;
+  if (id === 'reportes') cargarReportes();
 }
 
 // ── FORMULARIO NUEVA PIEZA ───────────────────────────────────
@@ -86,6 +87,53 @@ async function cargarInspecciones() {
 
   } catch (err) {
     console.log('Backend no disponible, mostrando datos de ejemplo');
+  }
+}
+
+// ── CARGAR REPORTES POR PIEZA ────────────────────────────────
+async function cargarReportes() {
+  const tbody = document.getElementById('reportes-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">Cargando datos...</td></tr>';
+
+  try {
+    const res = await fetch(`${API}/inspecciones`);
+    if (!res.ok) throw new Error('Error al cargar inspecciones');
+    const data = await res.json();
+
+    if (!Array.isArray(data) || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">No hay datos disponibles</td></tr>';
+      return;
+    }
+
+    const agrupado = data.reduce((acc, insp) => {
+      const pieza = insp.pieza || 'Sin tipo';
+      if (!acc[pieza]) acc[pieza] = { pieza, total: 0, aprobadas: 0, rechazadas: 0 };
+      acc[pieza].total += 1;
+      if (insp.resultado === 'APROBADA') acc[pieza].aprobadas += 1;
+      else acc[pieza].rechazadas += 1;
+      return acc;
+    }, {});
+
+    const filas = Object.values(agrupado)
+      .sort((a, b) => b.total - a.total)
+      .map(item => {
+        const tasa = item.total ? ((item.aprobadas / item.total) * 100).toFixed(1) : '0.0';
+        return `
+          <tr>
+            <td>${item.pieza}</td>
+            <td class="mono">${item.total}</td>
+            <td class="mono">${item.aprobadas}</td>
+            <td class="mono">${item.rechazadas}</td>
+            <td class="mono">${tasa}%</td>
+          </tr>`;
+      })
+      .join('');
+
+    tbody.innerHTML = filas || '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">No hay datos disponibles</td></tr>';
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">No se pudieron cargar los datos</td></tr>';
+    console.log(err);
   }
 }
 
