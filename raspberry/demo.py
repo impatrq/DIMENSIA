@@ -14,6 +14,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(__file__))
 from database.db import BaseDatos
 from reportes.generador import GeneradorReportes
+from verificar_sistema import verificar_backend
 
 _URL_BACKEND = "http://localhost:5000"
 
@@ -76,15 +77,6 @@ def actualizar_estado_dashboard(n_inspeccion, resultado):
         pass
 
 _RUTA_REPORTE = os.path.join(os.path.dirname(__file__), "reportes", "demo_reporte.pdf")
-
-
-def verificar_backend():
-    """Verifica que el servidor Flask esté respondiendo antes de arrancar la demo."""
-    try:
-        respuesta = requests.get(_URL_BACKEND + "/", timeout=2)
-        return respuesta.status_code == 200
-    except Exception:
-        return False
 
 
 # ─── Piezas de ejemplo ────────────────────────────────────────────────────────
