@@ -492,38 +492,24 @@
             </button>
           </div>
           <div class="card">
-            <div class="card-title">Reportes generados</div>
-            <div class="report-list">
-              <div class="report-item">
-                <div>
-                  <div class="report-name">Trazabilidad ASME — Turno mañana</div>
-                  <div class="report-meta mono">89 piezas · 95.5% aprobación</div>
-                </div>
-                <div class="report-actions">
-                  <span class="gray small">Hoy</span>
-                  <span class="pill pend" style="cursor:pointer">PDF</span>
-                </div>
-              </div>
-              <div class="report-item">
-                <div>
-                  <div class="report-name">Resumen diario</div>
-                  <div class="report-meta mono">247 piezas · 93.5% aprobación</div>
-                </div>
-                <div class="report-actions">
-                  <span class="gray small">Ayer</span>
-                  <span class="pill pend" style="cursor:pointer">PDF</span>
-                </div>
-              </div>
-              <div class="report-item">
-                <div>
-                  <div class="report-name">Informe mensual — Marzo</div>
-                  <div class="report-meta mono">4.832 piezas</div>
-                </div>
-                <div class="report-actions">
-                  <span class="gray small">01/04</span>
-                  <span class="pill pend" style="cursor:pointer">CSV</span>
-                </div>
-              </div>
+            <div class="card-title">Resumen por tipo de pieza</div>
+            <div class="table-wrap" style="overflow-x:auto">
+              <table class="data-table" id="reportes-table">
+                <thead>
+                  <tr>
+                    <th>Pieza</th>
+                    <th>Total</th>
+                    <th>Aprobadas</th>
+                    <th>Rechazadas</th>
+                    <th>Tasa de aprobación</th>
+                  </tr>
+                </thead>
+                <tbody id="reportes-table-body">
+                  <tr>
+                    <td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">Cargando datos...</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
