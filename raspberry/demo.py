@@ -126,6 +126,21 @@ def generar_medicion(pieza, forzar_rechazo=False):
     return {"alto": alto, "ancho": ancho, "largo": largo}
 
 
+def generar_secuencia(n_inspecciones):
+    """
+    Genera la lista de resultados para la sesión.
+    True = aprobada, False = rechazada (se pasará como forzar_rechazo invertido).
+    Los 3 rechazos quedan siempre centrados sin importar cuántas inspecciones se pidan.
+    """
+    medio = n_inspecciones // 2
+    secuencia = [True] * n_inspecciones
+    # Marcar las 3 posiciones centrales como rechazadas
+    for pos in [medio - 1, medio, medio + 1]:
+        if 0 <= pos < n_inspecciones:
+            secuencia[pos] = False
+    return secuencia
+
+
 def evaluar(dimensiones, pieza):
     """Compara las dimensiones contra tolerancias. Devuelve 'APROBADA' o 'RECHAZADA'."""
     def ok(valor, ref, tol):
@@ -166,20 +181,15 @@ def simular_sesion(n_inspecciones=10, operario="Demo"):
     aprobadas  = 0
     rechazadas = 0
 
-    # Secuencia fija: mayoría aprobadas, con 3 rechazos consecutivos en el medio.
-    # Los rechazos en posiciones 4, 5 y 6 disparan la alerta del dashboard.
-    # True = forzar rechazo, False = generar aprobada.
-    secuencia = [False, False, False, True, True, True, False, False, False, False]
-
-    # Si se piden más de 10 inspecciones, rellenar el resto con aprobadas
-    while len(secuencia) < n_inspecciones:
-        secuencia.append(False)
+    # Secuencia dinámica: los 3 rechazos siempre quedan centrados en la sesión
+    secuencia     = generar_secuencia(n_inspecciones)
+    primer_rechazo = secuencia.index(False)  # índice del primer rechazo de la racha
 
     for i in range(1, n_inspecciones + 1):
-        forzar_rechazo = secuencia[i - 1]
+        forzar_rechazo = not secuencia[i - 1]  # False en secuencia → forzar rechazo
 
         # Avisar antes de la racha para que el presentador esté atento al dashboard
-        if i == 4:
+        if (i - 1) == primer_rechazo:
             print(">>> A partir de aca se simulan 3 rechazos seguidos para mostrar la alerta del dashboard <<<")
 
         dimensiones   = generar_medicion(pieza, forzar_rechazo)
