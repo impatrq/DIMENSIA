@@ -3,64 +3,54 @@
 # La Raspberry Pi calcula las dimensiones reales y decide el resultado
 # MicroPython
 
-from machine import I2C, Pin
 from time import sleep_ms
-import urandom
-from multiplexor import GestorSensores
+from urandom import randint
 from comunicacion import Comunicacion
 
-# Cambiar a False para usar los sensores reales en producción
 MODO_SIMULACION = True
 
-# ─── Inicialización del hardware ──────────────────────────────────────────────
+# ─── Inicialización del hardware (solo si hay sensores reales) ────────────────
 
-i2c = I2C(0, sda=Pin(21), scl=Pin(22), freq=400_000)
-gestor = GestorSensores(i2c)
-comunicacion = Comunicacion()
+if not MODO_SIMULACION:
+    from machine import I2C, Pin
+    from multiplexor import GestorSensores
 
-# ─── Setup ────────────────────────────────────────────────────────────────────
+    i2c    = I2C(0, sda=Pin(21), scl=Pin(22), freq=400_000)
+    gestor = GestorSensores(i2c)
 
-if MODO_SIMULACION:
-    print("MODO SIMULACION ACTIVO")
-else:
-    # inicializar_sensores() devuelve un dict: {"s1": sensor, "s2": ..., ...}
     print("Inicializando sensores...")
+    # inicializar_sensores() devuelve un dict: {"s1": sensor, "s2": ..., ...}
     sensores = gestor.inicializar_sensores()
-    print("Sensores reales activos")
+    print("5 sensores listos. Enviando datos...")
+
+comunicacion = Comunicacion()
 
 
 def generar_lecturas_simuladas():
-    """
-    Genera lecturas aleatorias dentro de rangos realistas para cada sensor.
-    Útil para probar el sistema completo sin hardware conectado.
-    """
-    def aleatorio(minimo, maximo):
-        # urandom.getrandbits(8) devuelve un entero entre 0 y 255
-        # Se escala al rango deseado con módulo y se suma el mínimo
-        return minimo + (urandom.getrandbits(8) % (maximo - minimo + 1))
-
+    """Genera lecturas aleatorias dentro de rangos realistas para la demo."""
     return {
-        "s1":  aleatorio(208, 216),  # alto resultante: 270 - s1 → 54 a 62 mm
-        "s2":  aleatorio(67,  72),   # ancho resultante: 160 - s2 - s2p → 19 a 23 mm
-        "s2p": aleatorio(67,  72),
-        "s3":  aleatorio(78,  83),   # largo resultante: 220 - s3 - s3p → 54 a 62 mm
-        "s3p": aleatorio(78,  83),
+        "s1":  randint(208, 216),  # alto
+        "s2":  randint(67, 72),    # ancho izquierdo
+        "s2p": randint(67, 72),    # ancho derecho
+        "s3":  randint(78, 83),    # largo frontal
+        "s3p": randint(78, 83),    # largo posterior
     }
 
 
 # ─── Loop principal ───────────────────────────────────────────────────────────
 
+print("Modo simulacion: {}".format(MODO_SIMULACION))
+
 while True:
     if MODO_SIMULACION:
-        # Generar lecturas simuladas en lugar de leer los sensores físicos
         mediciones = generar_lecturas_simuladas()
     else:
-        # Leer los 5 sensores reales — todos activos en el bus con distintas direcciones
+        # Leer los 5 sensores — todos activos en el bus con distintas direcciones
         mediciones = {}
         for nombre, sensor in sensores.items():
             mediciones[nombre] = sensor.leer_distancia()
 
-    # Enviar las lecturas por Serial — misma ruta tanto en simulación como en real
+    # Enviar las 5 lecturas brutas por Serial — la Raspberry Pi decide el resultado
     comunicacion.enviar_mediciones(mediciones)
 
     sleep_ms(500)
