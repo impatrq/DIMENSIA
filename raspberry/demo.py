@@ -8,12 +8,76 @@ import random
 import json
 import os
 import sys
+from datetime import datetime
 
-# Agregar la carpeta database/ al path para poder importar BaseDatos
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "database"))
-from db import BaseDatos
+# Agregar el directorio actual al path para importar módulos del proyecto
+sys.path.insert(0, os.path.dirname(__file__))
+from database.db import BaseDatos
+from reportes.generador import GeneradorReportes
+from verificar_sistema import verificar_backend
 
 _URL_BACKEND = "http://localhost:5000"
+
+DELAY_ENTRE_INSPECCIONES = 5  # segundos entre inspecciones para que el dashboard se vea fluido
+
+
+def mostrar_bienvenida():
+    """Imprime el banner de presentación del sistema al inicio de la demo."""
+    print("=" * 50)
+    print("        DIMENSIA")
+    print("  Sistema de Inspeccion Dimensional Automatizada")
+    print("  EET N°7 — Taller Regional Quilmes")
+    print("  Especialidad Avionica")
+    print("=" * 50)
+
+
+def generar_numero_serie(n_inspeccion):
+    """Genera un número de serie único con formato DIM-{AAAAMMDD}-{NNN}."""
+    fecha = datetime.now().strftime("%Y%m%d")
+    return "DIM-{}-{:03d}".format(fecha, n_inspeccion)
+
+
+def actualizar_estado_dashboard(n_inspeccion, resultado):
+    """
+    Envía el estado actual del sistema a los endpoints del dashboard.
+    Se llama después de cada inspección para que los widgets se actualicen.
+    Todos los POSTs con timeout=1 para no bloquear la demo si el backend no responde.
+    """
+    # Sensores: los 3 detectaron la pieza en esta inspección
+    try:
+        requests.post(_URL_BACKEND + "/sensores",
+                      json={"S1": True, "S2": True, "S3": True}, timeout=1)
+    except Exception:
+        pass
+
+    # Plato: terminó la vuelta completa de 8 capturas
+    try:
+        requests.post(_URL_BACKEND + "/plato",
+                      json={"girando": False, "angulo_actual": 0,
+                            "capturas_completadas": 8}, timeout=1)
+    except Exception:
+        pass
+
+    # Captura: total acumulado de fotos tomadas (8 por inspección)
+    try:
+        requests.post(_URL_BACKEND + "/captura",
+                      json={"total": n_inspeccion * 8}, timeout=1)
+    except Exception:
+        pass
+
+    # Servos: servo2 activo si aprobada, servo3 activo si rechazada
+    if resultado == "APROBADA":
+        estado_servos = {"servo1": "reposo", "servo2": "activo", "servo3": "reposo"}
+    else:
+        estado_servos = {"servo1": "reposo", "servo2": "reposo", "servo3": "activo"}
+
+    try:
+        requests.post(_URL_BACKEND + "/servos", json=estado_servos, timeout=1)
+    except Exception:
+        pass
+
+_RUTA_REPORTE = os.path.join(os.path.dirname(__file__), "reportes", "demo_reporte.pdf")
+
 
 # ─── Piezas de ejemplo ────────────────────────────────────────────────────────
 
@@ -49,18 +113,32 @@ def generar_medicion(pieza, forzar_rechazo=False):
     - forzar_rechazo=True:  al menos una dimensión con desvío de 2 a 3mm
     """
     if not forzar_rechazo:
-        # Variación pequeña dentro de tolerancia
         alto  = round(pieza["largo_ref"] + random.uniform(-0.5, 0.5), 1)
         ancho = round(pieza["od_ref"]    + random.uniform(-0.5, 0.5), 1)
         largo = round(pieza["largo_ref"] + random.uniform(-0.5, 0.5), 1)
     else:
-        # Elegir al azar qué dimensión va a fallar (puede ser más de una)
+        # Elegir al azar qué dimensión va a fallar
         desvio = random.uniform(2.0, 3.0) * random.choice([-1, 1])
         alto  = round(pieza["largo_ref"] + (desvio if random.random() < 0.6 else random.uniform(-0.5, 0.5)), 1)
         ancho = round(pieza["od_ref"]    + (desvio if random.random() < 0.6 else random.uniform(-0.5, 0.5)), 1)
         largo = round(pieza["largo_ref"] + random.uniform(-0.5, 0.5), 1)
 
     return {"alto": alto, "ancho": ancho, "largo": largo}
+
+
+def generar_secuencia(n_inspecciones):
+    """
+    Genera la lista de resultados para la sesión.
+    True = aprobada, False = rechazada (se pasará como forzar_rechazo invertido).
+    Los 3 rechazos quedan siempre centrados sin importar cuántas inspecciones se pidan.
+    """
+    medio = n_inspecciones // 2
+    secuencia = [True] * n_inspecciones
+    # Marcar las 3 posiciones centrales como rechazadas
+    for pos in [medio - 1, medio, medio + 1]:
+        if 0 <= pos < n_inspecciones:
+            secuencia[pos] = False
+    return secuencia
 
 
 def evaluar(dimensiones, pieza):
@@ -74,14 +152,25 @@ def evaluar(dimensiones, pieza):
     return "APROBADA" if (alto_ok and ancho_ok) else "RECHAZADA"
 
 
-def simular_sesion(n_inspecciones=10):
+def simular_sesion(n_inspecciones=10, operario="Demo"):
     """
     Simula una sesión completa: elige una pieza, genera inspecciones,
-    las envía al backend y muestra el resultado en tiempo real.
+    las envía al backend, muestra resultados y genera un reporte PDF al final.
     """
     print("=" * 55)
     print("  DIMENSIA — Simulacion de sesion")
     print("=" * 55)
+
+    # Verificar que el backend esté disponible antes de arrancar
+    if not verificar_backend():
+        print("[ERROR] El backend no responde en {}".format(_URL_BACKEND))
+        print("Verificá que app.py esté corriendo antes de iniciar la demo.")
+        return
+
+    # Registrar el momento de inicio para calcular la duración al final
+    inicio = time.time()
+    print("Inicio de sesion: {}".format(datetime.now().strftime("%H:%M:%S")))
+    print("Operario: {}".format(operario))
 
     # Elegir una pieza al azar para toda la sesión
     pieza = random.choice(PIEZAS)
@@ -92,12 +181,20 @@ def simular_sesion(n_inspecciones=10):
     aprobadas  = 0
     rechazadas = 0
 
-    for i in range(1, n_inspecciones + 1):
-        # 80% de probabilidad de pieza aprobada
-        forzar_rechazo = random.random() < 0.20
+    # Secuencia dinámica: los 3 rechazos siempre quedan centrados en la sesión
+    secuencia     = generar_secuencia(n_inspecciones)
+    primer_rechazo = secuencia.index(False)  # índice del primer rechazo de la racha
 
-        dimensiones = generar_medicion(pieza, forzar_rechazo)
-        resultado   = evaluar(dimensiones, pieza)
+    for i in range(1, n_inspecciones + 1):
+        forzar_rechazo = not secuencia[i - 1]  # False en secuencia → forzar rechazo
+
+        # Avisar antes de la racha para que el presentador esté atento al dashboard
+        if (i - 1) == primer_rechazo:
+            print(">>> A partir de aca se simulan 3 rechazos seguidos para mostrar la alerta del dashboard <<<")
+
+        dimensiones   = generar_medicion(pieza, forzar_rechazo)
+        resultado     = evaluar(dimensiones, pieza)
+        numero_serie  = generar_numero_serie(i)
 
         if resultado == "APROBADA":
             aprobadas += 1
@@ -105,18 +202,14 @@ def simular_sesion(n_inspecciones=10):
             rechazadas += 1
 
         payload = {
-            "pieza":     pieza["nombre"],
-            "largo":     dimensiones["alto"],
-            "od":        dimensiones["ancho"],
-            "id":        None,
-            "resultado": resultado,
-            "operario":  "Demo",
-            "legajo":    "000",
-            "s1_raw":    None,
-            "s2_raw":    None,
-            "s2p_raw":   None,
-            "s3_raw":    None,
-            "s3p_raw":   None,
+            "pieza":         pieza["nombre"],
+            "alto":          dimensiones["alto"],
+            "ancho":         dimensiones["ancho"],
+            "largo":         dimensiones["largo"],
+            "resultado":     resultado,
+            "operario":      operario,
+            "legajo":        "0000",
+            "numero_serie":  numero_serie,
         }
 
         # Enviar al backend — si no está disponible, continuar igual
@@ -125,20 +218,80 @@ def simular_sesion(n_inspecciones=10):
         except Exception:
             pass
 
-        print("#{:02d}  {}  | alto:{:.1f}mm  ancho:{:.1f}mm  largo:{:.1f}mm".format(
-            i, resultado,
-            dimensiones["alto"], dimensiones["ancho"], dimensiones["largo"],
-        ))
+        # Imprimir encabezado con número de inspección, resultado y número de serie
+        print("#{:02d}  {} | {} | {}".format(i, resultado, pieza["nombre"], numero_serie))
 
-        time.sleep(1)
+        # Imprimir detalle de cada dimensión con referencia, diferencia y estado
+        for nombre_dim, valor, ref, tol in [
+            ("largo", dimensiones["alto"],  pieza["largo_ref"], pieza["largo_tol"]),
+            ("od",    dimensiones["ancho"], pieza["od_ref"],     pieza["od_tol"]),
+        ]:
+            diferencia = round(valor - ref, 1)
+            signo      = "+" if diferencia >= 0 else ""
+            dentro     = (ref - tol) <= valor <= (ref + tol)
+            estado     = "ok" if dentro else "FUERA DE TOLERANCIA"
+
+            print("  {:<6} {:.1f}mm  (ref: {:.1f} ± {:.1f}mm)  → {}{}mm  {}".format(
+                nombre_dim + ":", valor, ref, tol, signo, diferencia, estado
+            ))
+
+        # Actualizar los widgets del dashboard con el estado de esta inspección
+        actualizar_estado_dashboard(i, resultado)
+
+        # Pausa entre inspecciones — no aplicar después de la última
+        if i < n_inspecciones:
+            print("Esperando {}s...".format(DELAY_ENTRE_INSPECCIONES))
+            time.sleep(DELAY_ENTRE_INSPECCIONES)
+
+        # Línea divisora entre inspecciones
+        print("─" * 50)
 
     # Resumen final
-    tasa = round(rechazadas / n_inspecciones * 100)
+    tasa         = round(rechazadas / n_inspecciones * 100)
+    tiempo_total = round(time.time() - inicio, 1)
     print("-" * 55)
-    print("Total: {}  |  Aprobadas: {}  |  Rechazadas: {}  |  Tasa de rechazo: {}%".format(
-        n_inspecciones, aprobadas, rechazadas, tasa,
+    print("Fin de sesion:   {}".format(datetime.now().strftime("%H:%M:%S")))
+    print("Total: {}  |  Aprobadas: {}  |  Rechazadas: {}  |  Tasa de rechazo: {}%  |  Tiempo: {} segundos".format(
+        n_inspecciones, aprobadas, rechazadas, tasa, tiempo_total,
     ))
+
+    # Generar reporte PDF con las últimas N inspecciones de la base de datos
+    try:
+        db  = BaseDatos()
+        gen = GeneradorReportes(db)
+        gen.exportar_pdf(_RUTA_REPORTE, cantidad=n_inspecciones)
+        print("Reporte PDF generado: {}".format(_RUTA_REPORTE))
+        db.cerrar()
+    except Exception as e:
+        print("Error al generar el reporte PDF: {}".format(e))
+
+
+def limpiar_inspecciones_demo(db):
+    """
+    Borra de la tabla inspecciones todas las filas generadas por la demo.
+    Se identifican por el campo operario = 'Demo'.
+    """
+    cursor = db.conexion.execute(
+        "DELETE FROM inspecciones WHERE operario = 'Demo'"
+    )
+    db.conexion.commit()
+    print("{} inspección(es) de demo borrada(s).".format(cursor.rowcount))
 
 
 if __name__ == "__main__":
-    simular_sesion(10)
+    mostrar_bienvenida()
+
+    # --reset limpia los datos de demos anteriores antes de correr una sesión nueva
+    if "--reset" in sys.argv:
+        db = BaseDatos()
+        limpiar_inspecciones_demo(db)
+        db.cerrar()
+
+    # Leer --operario "Nombre Apellido" si se pasa como argumento
+    operario = "Demo"
+    if "--operario" in sys.argv:
+        idx = sys.argv.index("--operario")
+        if idx + 1 < len(sys.argv):
+            operario = sys.argv[idx + 1]
+
+    simular_sesion(10, operario=operario)
