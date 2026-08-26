@@ -24,6 +24,15 @@ def medir_referencia_en_imagen(ruta_imagen):
     # Convertir a grises para poder umbralizar
     grises = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
 
+    # Verificar que la imagen tenga suficiente contraste antes de umbralizar.
+    # Una desviación estándar baja indica que todos los píxeles tienen valores
+    # similares (imagen plana), lo que hace que Otsu no pueda separar el objeto.
+    if grises.std() < 15:
+        raise Exception(
+            "La imagen no tiene suficiente contraste. Verificá "
+            "la iluminación y que el objeto esté dentro del cuadro."
+        )
+
     # Otsu determina automáticamente el umbral óptimo según el histograma
     _, binaria = cv2.threshold(grises, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
