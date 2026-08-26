@@ -3,6 +3,7 @@
 # Correr con: python3 raspberry/verificar_sistema.py
 
 import requests
+from config import URL_BACKEND
 import os
 import sys
 
@@ -14,7 +15,7 @@ _RUTA_REPORTES    = os.path.join(_DIR, "reportes")
 def verificar_backend():
     """Comprueba que el servidor Flask esté levantado y respondiendo."""
     try:
-        respuesta = requests.get("http://localhost:5000/", timeout=3)
+        respuesta = requests.get(URL_BACKEND + "/", timeout=3)
         if respuesta.status_code == 200:
             print("[OK] Backend funcionando")
             return True
@@ -28,7 +29,7 @@ def verificar_backend():
 def verificar_piezas():
     """Comprueba que haya al menos una pieza cargada en la base de datos."""
     try:
-        respuesta = requests.get("http://localhost:5000/piezas", timeout=3)
+        respuesta = requests.get(URL_BACKEND + "/piezas", timeout=3)
         piezas = respuesta.json()
 
         if len(piezas) > 0:
