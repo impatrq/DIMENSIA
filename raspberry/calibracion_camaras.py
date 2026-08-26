@@ -96,6 +96,23 @@ def _capturar_con_camara(indice, ruta_guardado):
     return ruta_guardado
 
 
+def _capturar_y_medir(indice_camara, ruta_guardado):
+    """
+    Captura una imagen con la cámara indicada y mide el objeto de referencia.
+    Si la medición falla, ofrece al usuario reintentar antes de abortar.
+    Devuelve (ancho_px, alto_px) del objeto detectado.
+    """
+    while True:
+        try:
+            _capturar_con_camara(indice_camara, ruta_guardado)
+            return medir_referencia_en_imagen(ruta_guardado)
+        except Exception as e:
+            print("[ERROR] {}".format(e))
+            respuesta = input("¿Querés reintentar? (s/n): ").strip().lower()
+            if respuesta != "s":
+                raise  # Relanzar la excepción original para cortar el proceso
+
+
 def calibrar():
     """
     Guía al operario a calibrar las dos cámaras con un objeto de referencia.
@@ -115,9 +132,7 @@ def calibrar():
     print("Colocá el objeto de referencia bajo la cámara SUPERIOR")
 
     ruta_superior = os.path.join(CARPETA_CAPTURAS, "calibracion_superior.jpg")
-    _capturar_con_camara(0, ruta_superior)
-
-    ancho_px_sup, _ = medir_referencia_en_imagen(ruta_superior)
+    ancho_px_sup, _ = _capturar_y_medir(0, ruta_superior)
     px_por_mm_superior = round(ancho_px_sup / mm_referencia, 4)
 
     print("  Objeto detectado: {} px".format(ancho_px_sup))
@@ -128,9 +143,7 @@ def calibrar():
     print("Ahora colocá el objeto bajo la cámara LATERAL")
 
     ruta_lateral = os.path.join(CARPETA_CAPTURAS, "calibracion_lateral.jpg")
-    _capturar_con_camara(1, ruta_lateral)
-
-    ancho_px_lat, _ = medir_referencia_en_imagen(ruta_lateral)
+    ancho_px_lat, _ = _capturar_y_medir(1, ruta_lateral)
     px_por_mm_lateral = round(ancho_px_lat / mm_referencia, 4)
 
     print("  Objeto detectado: {} px".format(ancho_px_lat))
