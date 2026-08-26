@@ -16,7 +16,7 @@ from database.db import BaseDatos
 from reportes.generador import GeneradorReportes
 from verificar_sistema import verificar_backend
 
-_URL_BACKEND = "http://localhost:5000"
+from config import URL_BACKEND as _URL_BACKEND
 
 DELAY_ENTRE_INSPECCIONES = 5  # segundos entre inspecciones para que el dashboard se vea fluido
 
