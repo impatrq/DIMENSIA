@@ -48,6 +48,24 @@ def medir_referencia_en_imagen(ruta_imagen):
     # x, y = esquina superior izquierda; ancho y alto en píxeles
     x, y, ancho_px, alto_px = cv2.boundingRect(contorno_principal)
 
+    # Validar que el bounding rect tenga dimensiones válidas
+    if ancho_px == 0 or alto_px == 0:
+        raise Exception(
+            "No se pudo medir el objeto correctamente. Intentá "
+            "de nuevo con mejor iluminación."
+        )
+
+    # Validar que el objeto ocupe al menos el 1% de la imagen.
+    # Un objeto más pequeño probablemente es ruido, no el objeto de referencia.
+    area_objeto = ancho_px * alto_px
+    area_imagen = imagen.shape[0] * imagen.shape[1]
+    if area_objeto < area_imagen * 0.01:
+        raise Exception(
+            "El objeto detectado es demasiado pequeño. Verificá "
+            "que el objeto de referencia esté bien visible y "
+            "cerca de la cámara."
+        )
+
     return ancho_px, alto_px
 
 
