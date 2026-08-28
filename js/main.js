@@ -369,7 +369,7 @@ function renderHistorial(data) {
   if (!tbody) return;
 
   if (data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
   } else {
     tbody.innerHTML = '';
     data.forEach(insp => {
@@ -383,6 +383,7 @@ function renderHistorial(data) {
         <td class="mono">${insp.ancho ? insp.ancho.toFixed(1) : '—'}</td>
         <td class="mono">${insp.largo ? insp.largo.toFixed(1) : '—'}</td>
         <td><span class="pill ${insp.resultado === 'APROBADA' ? 'ok' : 'fail'}">${insp.resultado}</span></td>
+        <td>${insp.resultado === 'APROBADA' || insp.motivo_rechazo == null ? '—' : insp.motivo_rechazo}</td>
         <td class="gray small">${fecha}</td>
       `;
       tbody.appendChild(fila);
