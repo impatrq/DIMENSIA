@@ -68,6 +68,21 @@ Interfaz web para el operario y para supervisión:
 10. El backend guarda el registro en la base de datos.
 11. El dashboard consulta periódicamente el backend y actualiza la vista en tiempo real.
 
+## Proceso de medición por visión artificial
+
+Durante cada vuelta del plato giratorio (8 pasos de 45°, 360° completos), las 2 cámaras trabajan en conjunto en cada uno de los 8 ángulos, no de forma independiente:
+
+- **Cámara superior:** mide el diámetro exterior de la pieza (que corresponde al campo `ancho` en el sistema).
+- **Cámara lateral:** mide el largo y el alto de la pieza.
+
+Esto da como resultado 8 mediciones por cada dimensión (8 de ancho, 8 de largo, 8 de alto) en cada inspección. Las capturas que fallan en el procesamiento de un ángulo puntual (por ejemplo, por un reflejo o mala iluminación momentánea) se descartan, y el valor final de cada dimensión es el **promedio** de las mediciones válidas restantes.
+
+Este enfoque de promediar múltiples muestras para reducir el ruido de medición es el mismo principio que se usaba en la arquitectura anterior, basada en sensores VL53L4CD con medición diferencial. Al migrar a visión artificial, el equipo mantuvo el mismo criterio de ingeniería: una sola lectura puede tener error puntual, pero el promedio de varias lecturas tomadas desde distintos ángulos reduce significativamente ese error y da una medición más confiable de la pieza real.
+
+## Trazabilidad del motivo de rechazo
+
+Además de registrar si una pieza fue aprobada o rechazada, el sistema guarda el **detalle de qué dimensión específica** quedó fuera de tolerancia (`alto`, `ancho`, `largo`, o una combinación de estas). Este cálculo lo realiza el backend al recibir cada inspección, comparando los valores medidos contra la referencia y tolerancia cargada para ese tipo de pieza. Esta trazabilidad granular permite un diagnóstico más preciso de fallas en el proceso de fabricación, en vez de un resultado binario simple de aprobado/rechazado.
+
 ## Notas sobre la migración de arquitectura
 
 El sistema originalmente medía las piezas con 5 sensores VL53L4CD por diferencia de distancia (sensores S1, S2, S2', S3, S3'). Esa arquitectura fue reemplazada por el sistema actual de visión artificial con cámaras, que ofrece mayor precisión y flexibilidad para distintos tipos de pieza. Los 3 sensores que quedan (S1, S2, S3) cumplen ahora solo función de detección de presencia y posicionamiento, no de medición.
