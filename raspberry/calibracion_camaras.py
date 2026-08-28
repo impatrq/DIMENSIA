@@ -124,8 +124,18 @@ def calibrar():
     print("  CALIBRACIÓN DE CÁMARAS — DIMENSIA")
     print("=" * 55)
 
-    # Pedir el tamaño real del objeto de referencia
-    mm_referencia = float(input("¿Cuántos mm mide el objeto de referencia? (ej: 50): "))
+    # Pedir el tamaño real del objeto de referencia con validación de entrada
+    while True:
+        texto = input("¿Cuántos mm mide el objeto de referencia? (ej: 50): ")
+        try:
+            mm_referencia = float(texto)
+        except ValueError:
+            print("[ERROR] Ingresá un número válido.")
+            continue
+        if mm_referencia <= 0:
+            print("[ERROR] El valor tiene que ser mayor a 0.")
+            continue
+        break
 
     # ─── Cámara superior ──────────────────────────────────────────────────────
     print("\n--- Cámara SUPERIOR ---")
