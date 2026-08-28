@@ -42,7 +42,8 @@ def init_db():
             operario     TEXT,
             legajo       TEXT,
             lectura_s2p  REAL,
-            lectura_s3p  REAL
+            lectura_s3p  REAL,
+            motivo_rechazo TEXT
         )
     ''')
 
@@ -75,12 +76,26 @@ def init_db():
 
 # ── GUARDAR INSPECCION ───────────────────────────────
 def guardar_inspeccion(datos):
+    motivo_rechazo = None
+    if datos.get('resultado') == 'RECHAZADA':
+        pieza = obtener_pieza_por_nombre(datos.get('pieza'))
+        if pieza:
+            fuera_tolerancia = []
+            for dim in ('alto', 'ancho', 'largo'):
+                valor = datos.get(dim)
+                ref = pieza.get(f'{dim}_ref')
+                tol = pieza.get(f'{dim}_tol')
+                if valor is not None and ref is not None and tol is not None:
+                    if abs(valor - ref) > tol:
+                        fuera_tolerancia.append(dim)
+            motivo_rechazo = ', '.join(fuera_tolerancia) if fuera_tolerancia else None
+
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute('''
         INSERT INTO inspecciones
-          (pieza, numero_serie, alto, ancho, largo, resultado, fecha, operario, legajo, lectura_s2p, lectura_s3p)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (pieza, numero_serie, alto, ancho, largo, resultado, fecha, operario, legajo, lectura_s2p, lectura_s3p, motivo_rechazo)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         datos.get('pieza'),
         datos.get('numero_serie'),
@@ -92,7 +107,8 @@ def guardar_inspeccion(datos):
         datos.get('operario'),
         datos.get('legajo'),
         datos.get('lectura_s2p'),
-        datos.get('lectura_s3p')
+        datos.get('lectura_s3p'),
+        motivo_rechazo
     ))
     conn.commit()
     conn.close()
@@ -128,6 +144,16 @@ def guardar_pieza(datos):
     ultimo_id = c.lastrowid
     conn.close()
     return ultimo_id
+
+# ── OBTENER PIEZA POR NOMBRE ─────────────────────────
+def obtener_pieza_por_nombre(nombre):
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute('SELECT * FROM piezas WHERE nombre = ?', (nombre,))
+    fila = c.fetchone()
+    conn.close()
+    return dict(fila) if fila else None
 
 # ── OBTENER PIEZAS ───────────────────────────────────
 def obtener_piezas():
