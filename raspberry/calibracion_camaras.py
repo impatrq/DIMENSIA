@@ -32,8 +32,23 @@ def medir_referencia_en_imagen(ruta_imagen):
     if not contornos:
         raise Exception("No se detectó ningún objeto en la imagen.")
 
-    # Tomar el contorno más grande — es el objeto de referencia
-    contorno_principal = max(contornos, key=cv2.contourArea)
+    # Filtrar contornos que cubran más del 90% de la imagen: casi siempre son el
+    # borde completo que Otsu detecta cuando la iluminación es pareja o hay sombras.
+    area_imagen  = imagen.shape[0] * imagen.shape[1]
+    contornos_validos = [
+        c for c in contornos if cv2.contourArea(c) < area_imagen * 0.90
+    ]
+
+    if not contornos_validos:
+        raise Exception(
+            "Solo se detectó el borde de la imagen, no un objeto "
+            "real. Puede ser un problema de iluminación o sombras "
+            "alrededor de la pieza — probá con un fondo más "
+            "uniforme o mejor contraste."
+        )
+
+    # Tomar el contorno más grande de la lista ya filtrada
+    contorno_principal = max(contornos_validos, key=cv2.contourArea)
 
     # Obtener el rectángulo que encierra el contorno
     # x, y = esquina superior izquierda; ancho y alto en píxeles
