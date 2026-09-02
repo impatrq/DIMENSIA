@@ -18,6 +18,63 @@ from verificar_sistema import verificar_backend
 
 from config import URL_BACKEND as _URL_BACKEND
 
+import csv
+
+_RUTA_PENDIENTES = os.path.join(os.path.dirname(__file__), "pendientes.jsonl")
+
+
+def guardar_pendiente(payload):
+    """Guarda una inspección que no se pudo enviar, para reintentar después."""
+    with open(_RUTA_PENDIENTES, "a") as f:
+        f.write(json.dumps(payload) + "\n")
+
+
+def reintentar_pendientes():
+    """Intenta reenviar las inspecciones guardadas localmente. Devuelve cuántas logró enviar."""
+    if not os.path.exists(_RUTA_PENDIENTES):
+        return 0
+
+    with open(_RUTA_PENDIENTES, "r") as f:
+        lineas = [linea.strip() for linea in f if linea.strip()]
+
+    if not lineas:
+        return 0
+
+    enviados = 0
+    no_enviados = []
+    for linea in lineas:
+        payload = json.loads(linea)
+        try:
+            respuesta = requests.post(_URL_BACKEND + "/inspeccion", json=payload, timeout=3)
+            if respuesta.status_code == 200:
+                enviados += 1
+            else:
+                no_enviados.append(linea)
+        except Exception:
+            no_enviados.append(linea)
+
+    # Reescribir el archivo solo con los que siguen pendientes
+    with open(_RUTA_PENDIENTES, "w") as f:
+        for linea in no_enviados:
+            f.write(linea + "\n")
+
+    if enviados > 0:
+        print("[BUFFER] Se reenviaron {} inspeccion(es) pendiente(s).".format(enviados))
+
+    return enviados
+
+
+def enviar_inspeccion(payload):
+    """Envía una inspección al backend. Si falla, la guarda en el buffer local."""
+    try:
+        respuesta = requests.post(_URL_BACKEND + "/inspeccion", json=payload, timeout=3)
+        if respuesta.status_code != 200:
+            guardar_pendiente(payload)
+            print("[BUFFER] El backend respondió con error, inspeccion guardada localmente.")
+    except Exception:
+        guardar_pendiente(payload)
+        print("[BUFFER] No se pudo conectar al backend, inspeccion guardada localmente.")
+
 DELAY_ENTRE_INSPECCIONES = 5  # segundos entre inspecciones para que el dashboard se vea fluido
 
 
@@ -161,6 +218,9 @@ def simular_sesion(n_inspecciones=10, operario="Demo"):
     print("  DIMENSIA — Simulacion de sesion")
     print("=" * 55)
 
+    # Reintentar inspecciones que quedaron pendientes de sesiones anteriores
+    reintentar_pendientes()
+
     # Verificar que el backend esté disponible antes de arrancar
     if not verificar_backend():
         print("[ERROR] El backend no responde en {}".format(_URL_BACKEND))
@@ -212,12 +272,9 @@ def simular_sesion(n_inspecciones=10, operario="Demo"):
             "numero_serie":  numero_serie,
         }
 
-        # Enviar al backend — si no está disponible, continuar igual
-        try:
-            requests.post(_URL_BACKEND + "/inspeccion", json=payload, timeout=3)
-        except Exception:
-            pass
-
+        # Enviar al backend — si falla, se guarda en el buffer local para reintentar despues
+        enviar_inspeccion(payload)
+        
         # Imprimir encabezado con número de inspección, resultado y número de serie
         print("#{:02d}  {} | {} | {}".format(i, resultado, pieza["nombre"], numero_serie))
 
