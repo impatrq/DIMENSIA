@@ -1,1 +1,9 @@
 CLAUDE.md
+
+# Datos generados localmente por la calibración de cámaras y los reportes.
+# Son específicos de cada instalación física (cámara, iluminación, distancia)
+# y no forman parte del código fuente del proyecto.
+raspberry/capturas/
+raspberry/calibracion_camaras.json
+raspberry/reportes/*.pdf
+raspberry/reportes/*.csv
