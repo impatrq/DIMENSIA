@@ -24,6 +24,15 @@ def medir_referencia_en_imagen(ruta_imagen):
     # Convertir a grises para poder umbralizar
     grises = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
 
+    # Verificar que la imagen tenga suficiente contraste antes de umbralizar.
+    # Una desviación estándar baja indica que todos los píxeles tienen valores
+    # similares (imagen plana), lo que hace que Otsu no pueda separar el objeto.
+    if grises.std() < 15:
+        raise Exception(
+            "La imagen no tiene suficiente contraste. Verificá "
+            "la iluminación y que el objeto esté dentro del cuadro."
+        )
+
     # Otsu determina automáticamente el umbral óptimo según el histograma
     _, binaria = cv2.threshold(grises, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
@@ -38,6 +47,24 @@ def medir_referencia_en_imagen(ruta_imagen):
     # Obtener el rectángulo que encierra el contorno
     # x, y = esquina superior izquierda; ancho y alto en píxeles
     x, y, ancho_px, alto_px = cv2.boundingRect(contorno_principal)
+
+    # Validar que el bounding rect tenga dimensiones válidas
+    if ancho_px == 0 or alto_px == 0:
+        raise Exception(
+            "No se pudo medir el objeto correctamente. Intentá "
+            "de nuevo con mejor iluminación."
+        )
+
+    # Validar que el objeto ocupe al menos el 1% de la imagen.
+    # Un objeto más pequeño probablemente es ruido, no el objeto de referencia.
+    area_objeto = ancho_px * alto_px
+    area_imagen = imagen.shape[0] * imagen.shape[1]
+    if area_objeto < area_imagen * 0.01:
+        raise Exception(
+            "El objeto detectado es demasiado pequeño. Verificá "
+            "que el objeto de referencia esté bien visible y "
+            "cerca de la cámara."
+        )
 
     return ancho_px, alto_px
 
@@ -69,6 +96,23 @@ def _capturar_con_camara(indice, ruta_guardado):
     return ruta_guardado
 
 
+def _capturar_y_medir(indice_camara, ruta_guardado):
+    """
+    Captura una imagen con la cámara indicada y mide el objeto de referencia.
+    Si la medición falla, ofrece al usuario reintentar antes de abortar.
+    Devuelve (ancho_px, alto_px) del objeto detectado.
+    """
+    while True:
+        try:
+            _capturar_con_camara(indice_camara, ruta_guardado)
+            return medir_referencia_en_imagen(ruta_guardado)
+        except Exception as e:
+            print("[ERROR] {}".format(e))
+            respuesta = input("¿Querés reintentar? (s/n): ").strip().lower()
+            if respuesta != "s":
+                raise  # Relanzar la excepción original para cortar el proceso
+
+
 def calibrar():
     """
     Guía al operario a calibrar las dos cámaras con un objeto de referencia.
@@ -80,17 +124,25 @@ def calibrar():
     print("  CALIBRACIÓN DE CÁMARAS — DIMENSIA")
     print("=" * 55)
 
-    # Pedir el tamaño real del objeto de referencia
-    mm_referencia = float(input("¿Cuántos mm mide el objeto de referencia? (ej: 50): "))
+    # Pedir el tamaño real del objeto de referencia con validación de entrada
+    while True:
+        texto = input("¿Cuántos mm mide el objeto de referencia? (ej: 50): ")
+        try:
+            mm_referencia = float(texto)
+        except ValueError:
+            print("[ERROR] Ingresá un número válido.")
+            continue
+        if mm_referencia <= 0:
+            print("[ERROR] El valor tiene que ser mayor a 0.")
+            continue
+        break
 
     # ─── Cámara superior ──────────────────────────────────────────────────────
     print("\n--- Cámara SUPERIOR ---")
     print("Colocá el objeto de referencia bajo la cámara SUPERIOR")
 
     ruta_superior = os.path.join(CARPETA_CAPTURAS, "calibracion_superior.jpg")
-    _capturar_con_camara(0, ruta_superior)
-
-    ancho_px_sup, _ = medir_referencia_en_imagen(ruta_superior)
+    ancho_px_sup, _ = _capturar_y_medir(0, ruta_superior)
     px_por_mm_superior = round(ancho_px_sup / mm_referencia, 4)
 
     print("  Objeto detectado: {} px".format(ancho_px_sup))
@@ -101,9 +153,7 @@ def calibrar():
     print("Ahora colocá el objeto bajo la cámara LATERAL")
 
     ruta_lateral = os.path.join(CARPETA_CAPTURAS, "calibracion_lateral.jpg")
-    _capturar_con_camara(1, ruta_lateral)
-
-    ancho_px_lat, _ = medir_referencia_en_imagen(ruta_lateral)
+    ancho_px_lat, _ = _capturar_y_medir(1, ruta_lateral)
     px_por_mm_lateral = round(ancho_px_lat / mm_referencia, 4)
 
     print("  Objeto detectado: {} px".format(ancho_px_lat))
