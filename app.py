@@ -87,27 +87,56 @@ def get_calibraciones():
     calibraciones = obtener_calibraciones()
     return jsonify(calibraciones)
 
-# Estado de los 3 sensores de presencia (booleanos)
-# S1: pieza llegó a la zona → detiene cinta
-# S2: pieza bien posicionada sobre el plato
-# S3: pieza centrada → habilita inicio de rotación
-sensores_presencia = {
-    'S1': False, 'S2': False, 'S3': False
+# Estado del elevador y la compuerta de seguridad (booleanos)
+# final_carrera_superior: elevador llegó al tope superior
+# final_carrera_inferior: elevador llegó al tope inferior
+# puerta_cerrada: compuerta de seguridad cerrada
+estado_elevador = {
+    'final_carrera_superior': False,
+    'final_carrera_inferior': True,
+    'puerta_cerrada': True
 }
 
-# Recibir estado de los 3 sensores de presencia desde el ESP32
+# Recibir estado del elevador y la compuerta desde el ESP32
 @app.route('/sensores', methods=['POST'])
 def set_sensores():
     datos = request.get_json()
-    for key in ('S1', 'S2', 'S3'):
+    for key in ('final_carrera_superior', 'final_carrera_inferior', 'puerta_cerrada'):
         if key in datos:
-            sensores_presencia[key] = bool(datos[key])
+            estado_elevador[key] = bool(datos[key])
     return jsonify({'estado': 'ok'})
 
-# Obtener estado actual de los 3 sensores de presencia
+# Obtener estado actual del elevador y la compuerta
 @app.route('/sensores', methods=['GET'])
 def get_sensores():
-    return jsonify(sensores_presencia)
+    return jsonify(estado_elevador)
+
+# Estados posibles del ciclo de inspeccion
+ESTADOS_CICLO_VALIDOS = (
+    'IDLE', 'SUBIENDO', 'MIDIENDO', 'PROCESANDO', 'DECISION',
+    'BAJANDO', 'INCLINANDO_PLATAFORMA', 'EMPUJANDO', 'CLASIFICADO'
+)
+
+# Estado del ciclo de inspeccion en memoria
+estado_ciclo = {'estado': 'IDLE'}
+
+# Recibir nuevo estado del ciclo desde el ESP32
+@app.route('/estado_ciclo', methods=['POST'])
+def set_estado_ciclo():
+    datos = request.get_json()
+    nuevo_estado = datos.get('estado')
+    if nuevo_estado not in ESTADOS_CICLO_VALIDOS:
+        return jsonify({
+            'estado': 'error',
+            'mensaje': f'Estado invalido: {nuevo_estado}. Valores permitidos: {", ".join(ESTADOS_CICLO_VALIDOS)}'
+        }), 400
+    estado_ciclo['estado'] = nuevo_estado
+    return jsonify({'estado': 'ok'})
+
+# Obtener estado actual del ciclo de inspeccion
+@app.route('/estado_ciclo', methods=['GET'])
+def get_estado_ciclo():
+    return jsonify(estado_ciclo)
 
 # Capturas registradas por el ESP32 (ángulo en que se tomó cada foto)
 capturas = []
