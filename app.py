@@ -63,6 +63,21 @@ def set_operario():
 def get_operario():
     return jsonify(operario_activo)
 
+# Pieza activa en memoria
+pieza_activa = {'pieza': None}
+
+# Guardar pieza activa
+@app.route('/pieza_activa', methods=['POST'])
+def set_pieza_activa():
+    datos = request.get_json()
+    pieza_activa['pieza'] = datos.get('pieza')
+    return jsonify({'estado': 'ok'})
+
+# Obtener pieza activa
+@app.route('/pieza_activa', methods=['GET'])
+def get_pieza_activa():
+    return jsonify(pieza_activa)
+
 # Guardar calibracion de las camaras (factor px/mm)
 @app.route('/calibracion', methods=['POST'])
 def set_calibracion():
