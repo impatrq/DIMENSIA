@@ -1,6 +1,12 @@
 import sqlite3
+from datetime import datetime, timezone, timedelta
 
 DB = 'dimensia.db'
+
+TZ_ARG = timezone(timedelta(hours=-3))
+
+def fecha_arg():
+    return datetime.now(TZ_ARG).strftime('%Y-%m-%d %H:%M:%S')
 
 # ── INICIALIZAR BASE DE DATOS ────────────────────────
 def init_db():
@@ -10,78 +16,99 @@ def init_db():
     # Tabla de tipos de piezas
     c.execute('''
         CREATE TABLE IF NOT EXISTS piezas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL,
-            norma TEXT,
-            od_ref REAL,
-            od_tol REAL,
-            id_ref REAL,
-            id_tol REAL,
-            largo_ref REAL,
-            largo_tol REAL
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre     TEXT NOT NULL,
+            norma      TEXT,
+            alto_ref   REAL,
+            alto_tol   REAL,
+            ancho_ref  REAL,
+            ancho_tol  REAL,
+            largo_ref  REAL,
+            largo_tol  REAL
         )
     ''')
 
     # Tabla de inspecciones
     c.execute('''
         CREATE TABLE IF NOT EXISTS inspecciones (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            pieza TEXT NOT NULL,
-            largo REAL,
-            od REAL,
-            id_med REAL,
-            resultado TEXT,
-            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            operario TEXT,
-            legajo TEXT,
-            lectura_s2p REAL,
-            lectura_s3p REAL
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            pieza        TEXT NOT NULL,
+            numero_serie TEXT,
+            alto         REAL,
+            ancho        REAL,
+            largo        REAL,
+            resultado    TEXT,
+            fecha        TIMESTAMP,
+            operario     TEXT,
+            legajo       TEXT,
+            lectura_s2p  REAL,
+            lectura_s3p  REAL,
+            motivo_rechazo TEXT
         )
     ''')
 
-    # Tabla de calibracion
+    # Tabla de calibracion de camaras (factor px/mm)
     c.execute('''
         CREATE TABLE IF NOT EXISTS calibracion (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ref_s1 REAL,
-            d_s2_s2p REAL,
-            d_s3_s3p REAL,
-            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            px_por_mm_superior  REAL,
+            px_por_mm_lateral   REAL,
+            fecha            TIMESTAMP
         )
     ''')
 
-    # Cargar piezas de ejemplo si la tabla está vacía
+    # Cargar piezas de ejemplo si la tabla esta vacia
     c.execute('SELECT COUNT(*) FROM piezas')
     if c.fetchone()[0] == 0:
         piezas_ejemplo = [
-            ('Niple NPT 1/2"', 'ASME B16.11', 21.3, 0.5, 14.0, 0.5, 58.0, 1.0),
-            ('Union NPT 3/4"', 'ASME B16.11', 26.7, 0.5, 18.0, 0.5, 65.0, 1.0),
-            ('Brida DN25',     'DIN 2999',    25.8, 0.5, None, None, 42.0, 1.0),
-            ('Codo 90 1/2"',  'ASME B16.11', 21.3, 0.5, None, None, 38.0, 1.0),
+            ('Niple NPT 1/2"', 'ASME B16.11', 21.3, 0.5, 26.7, 0.5, 58.0, 1.0),
+            ('Union NPT 3/4"', 'ASME B16.11', 26.7, 0.5, 33.4, 0.5, 65.0, 1.0),
+            ('Brida DN25',     'DIN 2999',    12.0, 0.5, 115.0, 1.0, 42.0, 1.0),
+            ('Codo 90 1/2"',  'ASME B16.11', 21.3, 0.5, 26.7, 0.5, 38.0, 1.0),
         ]
-        c.executemany('INSERT INTO piezas (nombre, norma, od_ref, od_tol, id_ref, id_tol, largo_ref, largo_tol) VALUES (?,?,?,?,?,?,?,?)', piezas_ejemplo)
+        c.executemany(
+            'INSERT INTO piezas (nombre, norma, alto_ref, alto_tol, ancho_ref, ancho_tol, largo_ref, largo_tol) VALUES (?,?,?,?,?,?,?,?)',
+            piezas_ejemplo
+        )
 
     conn.commit()
     conn.close()
 
 # ── GUARDAR INSPECCION ───────────────────────────────
 def guardar_inspeccion(datos):
+    motivo_rechazo = None
+    if datos.get('resultado') == 'RECHAZADA':
+        pieza = obtener_pieza_por_nombre(datos.get('pieza'))
+        if pieza:
+            fuera_tolerancia = []
+            for dim in ('alto', 'ancho', 'largo'):
+                valor = datos.get(dim)
+                ref = pieza.get(f'{dim}_ref')
+                tol = pieza.get(f'{dim}_tol')
+                if valor is not None and ref is not None and tol is not None:
+                    if abs(valor - ref) > tol:
+                        fuera_tolerancia.append(dim)
+            motivo_rechazo = ', '.join(fuera_tolerancia) if fuera_tolerancia else None
+
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute('''
         INSERT INTO inspecciones
-          (pieza, largo, od, id_med, resultado, operario, legajo, lectura_s2p, lectura_s3p)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (pieza, numero_serie, alto, ancho, largo, resultado, fecha, operario, legajo, lectura_s2p, lectura_s3p, motivo_rechazo)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         datos.get('pieza'),
+        datos.get('numero_serie'),
+        datos.get('alto'),
+        datos.get('ancho'),
         datos.get('largo'),
-        datos.get('od'),
-        datos.get('id'),
         datos.get('resultado'),
+        fecha_arg(),
         datos.get('operario'),
         datos.get('legajo'),
         datos.get('lectura_s2p'),
-        datos.get('lectura_s3p')
+        datos.get('lectura_s3p'),
+        motivo_rechazo
     ))
     conn.commit()
     conn.close()
@@ -101,15 +128,15 @@ def guardar_pieza(datos):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute('''
-        INSERT INTO piezas (nombre, norma, od_ref, od_tol, id_ref, id_tol, largo_ref, largo_tol)
+        INSERT INTO piezas (nombre, norma, alto_ref, alto_tol, ancho_ref, ancho_tol, largo_ref, largo_tol)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         datos.get('nombre'),
         datos.get('norma'),
-        datos.get('od_ref'),
-        datos.get('od_tol'),
-        datos.get('id_ref'),
-        datos.get('id_tol'),
+        datos.get('alto_ref'),
+        datos.get('alto_tol'),
+        datos.get('ancho_ref'),
+        datos.get('ancho_tol'),
         datos.get('largo_ref'),
         datos.get('largo_tol')
     ))
@@ -117,6 +144,16 @@ def guardar_pieza(datos):
     ultimo_id = c.lastrowid
     conn.close()
     return ultimo_id
+
+# ── OBTENER PIEZA POR NOMBRE ─────────────────────────
+def obtener_pieza_por_nombre(nombre):
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute('SELECT * FROM piezas WHERE nombre = ?', (nombre,))
+    fila = c.fetchone()
+    conn.close()
+    return dict(fila) if fila else None
 
 # ── OBTENER PIEZAS ───────────────────────────────────
 def obtener_piezas():
@@ -133,15 +170,17 @@ def guardar_calibracion(datos):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute('''
-        INSERT INTO calibracion (ref_s1, d_s2_s2p, d_s3_s3p)
+        INSERT INTO calibracion (px_por_mm_superior, px_por_mm_lateral, fecha)
         VALUES (?, ?, ?)
     ''', (
-        datos.get('REF_S1'),
-        datos.get('D_S2_S2p'),
-        datos.get('D_S3_S3p')
+        datos.get('px_por_mm_superior'),
+        datos.get('px_por_mm_lateral'),
+        fecha_arg()
     ))
     conn.commit()
+    fila = c.execute('SELECT fecha FROM calibracion WHERE id = ?', (c.lastrowid,)).fetchone()
     conn.close()
+    return fila[0] if fila else None
 
 # ── OBTENER ULTIMA CALIBRACION ───────────────────────
 def obtener_calibracion():
@@ -152,3 +191,13 @@ def obtener_calibracion():
     fila = c.fetchone()
     conn.close()
     return dict(fila) if fila else {}
+
+# ── OBTENER ULTIMAS 5 CALIBRACIONES ─────────────────
+def obtener_calibraciones():
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute('SELECT id, px_por_mm_superior, px_por_mm_lateral, fecha FROM calibracion ORDER BY fecha DESC LIMIT 5')
+    filas = [dict(f) for f in c.fetchall()]
+    conn.close()
+    return filas
