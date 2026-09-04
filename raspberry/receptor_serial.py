@@ -59,21 +59,13 @@ if __name__ == "__main__":
             if datos is None:
                 continue
 
-            # Armar la parte de mediciones: "s0:148mm s1:201mm ..."
-            mediciones = datos.get("mediciones", {})
-            lecturas = " ".join(
-                "{}:{}mm".format(s, v) for s, v in sorted(mediciones.items())
-            )
-
-            aprobada = datos.get("aprobada", False)
-
-            if aprobada:
-                print("APROBADA | {}".format(lecturas))
-            else:
-                # Detectar cuáles sensores fallaron desde el campo detalles
-                detalles = datos.get("detalles", {})
-                fallidos = [s for s, d in sorted(detalles.items()) if not d.get("ok")]
-                print("RECHAZADA | {} (fallo: {})".format(lecturas, ", ".join(fallidos)))
+            # Imprimir las 5 lecturas brutas y el timestamp.
+            # La ESP32 ya no evalúa tolerancias — solo manda los valores crudos.
+            # La evaluación la hace main.py en la Raspberry Pi.
+            print("s1={} s2={} s2p={} s3={} s3p={}  (t={}ms)".format(
+                datos.get("s1"), datos.get("s2"), datos.get("s2p"),
+                datos.get("s3"), datos.get("s3p"), datos.get("timestamp")
+            ))
 
     except KeyboardInterrupt:
         print("\nInterrumpido por el usuario.")
