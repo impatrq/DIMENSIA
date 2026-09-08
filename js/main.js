@@ -163,20 +163,40 @@ async function cargarPiezas() {
 }
 
 // ── CARGAR SENSORES DESDE EL BACKEND ────────────────────────
-function actualizarSensorPresencia(id, presente) {
+function actualizarSensorPresencia(id, activo) {
   const dot   = document.getElementById(`${id}-dot`);
   const texto = document.getElementById(`${id}-text`);
-  if (dot)   dot.classList.toggle('on', !!presente);
-  if (texto) texto.textContent = presente ? 'Detectado' : 'Libre';
+  if (dot)   dot.classList.toggle('on', !!activo);
+  if (texto) texto.textContent = activo ? 'Activado' : 'Libre';
+}
+
+function actualizarPuerta(cerrada) {
+  const dot   = document.getElementById('puerta-dot');
+  const texto = document.getElementById('puerta-text');
+  if (dot) dot.classList.toggle('on', !!cerrada);
+  if (texto) {
+    texto.textContent = cerrada ? 'Cerrada' : 'Abierta';
+    texto.style.color = cerrada ? 'var(--verde)' : 'var(--rojo)';
+  }
+}
+
+async function cargarEstadoCiclo() {
+  try {
+    const res  = await fetch(`${API}/estado_ciclo`);
+    const data = await res.json();
+    document.getElementById('estado-ciclo-texto').textContent = data.estado;
+  } catch (err) {
+    console.log('No se pudo cargar el estado del ciclo');
+  }
 }
 
 async function cargarSensores() {
   try {
     const res  = await fetch(`${API}/sensores`);
     const data = await res.json();
-    actualizarSensorPresencia('sensor-s1', data.S1);
-    actualizarSensorPresencia('sensor-s2', data.S2);
-    actualizarSensorPresencia('sensor-s3', data.S3);
+    actualizarSensorPresencia('fc-superior', data.final_carrera_superior);
+    actualizarSensorPresencia('fc-inferior', data.final_carrera_inferior);
+    actualizarPuerta(data.puerta_cerrada);
   } catch (err) {
     console.log('No se pudieron cargar los sensores');
   }
@@ -199,6 +219,8 @@ async function cargarSensores() {
   } catch (err) {
     console.log('No se pudo cargar el estado de las capturas');
   }
+
+  await cargarEstadoCiclo();
 }
 
 // ── CARGAR SERVOS DESDE EL BACKEND ──────────────────────────
@@ -212,9 +234,18 @@ async function cargarServos() {
       if (dot)   dot.classList.toggle('on', !!activo);
       if (texto) texto.textContent = activo ? 'Activo' : 'Inactivo';
     };
-    actualizar('servo1', data.servo1?.activo);
-    actualizar('servo2', data.servo2?.activo);
-    actualizar('servo3', data.servo3?.activo);
+    actualizar('rotacion',  data.rotacion?.activo);
+    actualizar('empujador', data.empujador?.activo);
+
+    const posicion = data.plataforma?.posicion || 'centro';
+    const definida = posicion === 'izquierda' || posicion === 'derecha';
+    const dot   = document.getElementById('plataforma-dot');
+    const texto = document.getElementById('plataforma-text');
+    if (dot) {
+      dot.classList.toggle('on', definida);
+      dot.classList.toggle('neutral', !definida);
+    }
+    if (texto) texto.textContent = posicion.charAt(0).toUpperCase() + posicion.slice(1);
   } catch (err) {
     console.log('No se pudieron cargar los servos');
   }
