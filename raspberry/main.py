@@ -24,6 +24,10 @@ _URL_BACKEND = "http://localhost:5000"
 # Valor de ejemplo — calibrar con el hardware real usando servo_plato.calibrar_paso().
 TIEMPO_GIRO_MS = 500
 
+# Tiempo máximo para recibir la confirmación "giro_completado" de la ESP32.
+# Si se supera, el ciclo se aborta para no quedar esperando indefinidamente.
+TIMEOUT_CONFIRMACION_SEG = 15
+
 
 def _enviar_serial(receptor, datos):
     """
@@ -83,13 +87,25 @@ def ejecutar_ciclo_inspeccion(pieza, camaras, procesador, receptor):
         # Mandar comando de giro a la ESP32 por Serial
         _enviar_serial(receptor, {"comando": "girar", "tiempo_ms": TIEMPO_GIRO_MS})
 
-        # Esperar la confirmación antes de capturar — el plato tiene que estar quieto
-        while True:
+        # Esperar la confirmación antes de capturar — el plato tiene que estar quieto.
+        # El bucle está acotado en tiempo real porque cada leer_siguiente() puede
+        # tardar hasta 5s por el timeout interno del Serial, así que contar intentos
+        # no da una cota real de tiempo transcurrido.
+        inicio_espera = time.time()
+        confirmado = False
+        while time.time() - inicio_espera < TIMEOUT_CONFIRMACION_SEG:
             confirmacion = receptor.leer_siguiente()
             if confirmacion is None:
                 continue
             if confirmacion.get("evento") == "giro_completado":
+                confirmado = True
                 break
+
+        if not confirmado:
+            print("[ERROR] La ESP32 no confirmó el giro en el ángulo {} "
+                  "grados tras {} segundos. Abortando ciclo de "
+                  "inspección.".format(angulo_grados, TIMEOUT_CONFIRMACION_SEG))
+            return None
 
         # Capturar con las dos cámaras ahora que el plato está en posición
         capturas = camaras.capturar(angulo_grados)
@@ -171,6 +187,20 @@ def main():
             if datos is None:
                 continue
 
+            # Manejar falla del elevador reportada por la ESP32
+            if datos.get("evento") == "error_elevador":
+                print("[ERROR] La ESP32 reportó una falla en el elevador. "
+                      "Revisá el final de carrera superior y el motor.")
+                try:
+                    requests.post(
+                        _URL_BACKEND + "/alerta_hardware",
+                        json={"tipo": "elevador", "mensaje": "Falla al subir"},
+                        timeout=2,
+                    )
+                except Exception:
+                    pass
+                continue
+
             # Esperar el evento que indica que la pieza está en posición de medición.
             # Lo dispara la ESP32 cuando el elevador llega arriba.
             if datos.get("evento") != "listo_para_medir":
@@ -187,6 +217,11 @@ def main():
 
             # Ejecutar el ciclo completo de captura, procesamiento y clasificación
             resultado_ciclo = ejecutar_ciclo_inspeccion(pieza, camaras, procesador, receptor)
+
+            # Si el ciclo fue abortado (timeout de giro), volver a esperar el próximo evento
+            if resultado_ciclo is None:
+                print("Aviso: ciclo abortado. Esperando próxima señal de la ESP32.")
+                continue
 
             operario_data = obtener_operario()
 
