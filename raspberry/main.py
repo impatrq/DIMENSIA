@@ -187,6 +187,20 @@ def main():
             if datos is None:
                 continue
 
+            # Manejar falla del elevador reportada por la ESP32
+            if datos.get("evento") == "error_elevador":
+                print("[ERROR] La ESP32 reportó una falla en el elevador. "
+                      "Revisá el final de carrera superior y el motor.")
+                try:
+                    requests.post(
+                        _URL_BACKEND + "/alerta_hardware",
+                        json={"tipo": "elevador", "mensaje": "Falla al subir"},
+                        timeout=2,
+                    )
+                except Exception:
+                    pass
+                continue
+
             # Esperar el evento que indica que la pieza está en posición de medición.
             # Lo dispara la ESP32 cuando el elevador llega arriba.
             if datos.get("evento") != "listo_para_medir":
