@@ -13,6 +13,7 @@ function showPage(id, el) {
     reportes:   'Reportes',
   };
   document.getElementById('page-title').textContent = titles[id] || id;
+  if (id === 'reportes') cargarReportes();
 }
 
 // ── FORMULARIO NUEVA PIEZA ───────────────────────────────────
@@ -44,7 +45,7 @@ async function cargarInspecciones() {
     if (!tabla) return;
 
     if (data.length === 0) {
-      tabla.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
+      tabla.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
       return;
     }
 
@@ -61,7 +62,6 @@ async function cargarInspecciones() {
       tabla.appendChild(fila);
     });
 
-    // Actualizar métricas
     const total = data.length;
     const aprobadas = data.filter(i => i.resultado === 'APROBADA').length;
     const rechazadas = total - aprobadas;
@@ -69,8 +69,71 @@ async function cargarInspecciones() {
     document.querySelector('.metric-value.green').textContent = aprobadas;
     document.querySelector('.metric-value.red').textContent = rechazadas;
 
+    // ── ALERTA DE RACHA DE RECHAZOS ──────────────────
+    const alerta = document.getElementById('alerta-racha');
+    const alertaTexto = document.getElementById('alerta-racha-texto');
+    if (alerta && alertaTexto) {
+      const ultimas3 = data.slice(0, 3);
+      const rachaRechazos = ultimas3.length === 3 && ultimas3.every(i => i.resultado === 'RECHAZADA');
+      if (rachaRechazos) {
+        const pieza = data[0].pieza || 'pieza desconocida';
+        alertaTexto.innerHTML = `<strong>⚠ Alerta:</strong> Las últimas 3 inspecciones de <strong>${pieza}</strong> fueron RECHAZADAS. Detener producción y revisar herramienta.`;
+        alerta.style.display = 'flex';
+      } else {
+        alertaTexto.innerHTML = '';
+        alerta.style.display = 'none';
+      }
+    }
+
   } catch (err) {
     console.log('Backend no disponible, mostrando datos de ejemplo');
+  }
+}
+
+// ── CARGAR REPORTES POR PIEZA ────────────────────────────────
+async function cargarReportes() {
+  const tbody = document.getElementById('reportes-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">Cargando datos...</td></tr>';
+
+  try {
+    const res = await fetch(`${API}/inspecciones`);
+    if (!res.ok) throw new Error('Error al cargar inspecciones');
+    const data = await res.json();
+
+    if (!Array.isArray(data) || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">No hay datos disponibles</td></tr>';
+      return;
+    }
+
+    const agrupado = data.reduce((acc, insp) => {
+      const pieza = insp.pieza || 'Sin tipo';
+      if (!acc[pieza]) acc[pieza] = { pieza, total: 0, aprobadas: 0, rechazadas: 0 };
+      acc[pieza].total += 1;
+      if (insp.resultado === 'APROBADA') acc[pieza].aprobadas += 1;
+      else acc[pieza].rechazadas += 1;
+      return acc;
+    }, {});
+
+    const filas = Object.values(agrupado)
+      .sort((a, b) => b.total - a.total)
+      .map(item => {
+        const tasa = item.total ? ((item.aprobadas / item.total) * 100).toFixed(1) : '0.0';
+        return `
+          <tr>
+            <td>${item.pieza}</td>
+            <td class="mono">${item.total}</td>
+            <td class="mono">${item.aprobadas}</td>
+            <td class="mono">${item.rechazadas}</td>
+            <td class="mono">${tasa}%</td>
+          </tr>`;
+      })
+      .join('');
+
+    tbody.innerHTML = filas || '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">No hay datos disponibles</td></tr>';
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">No se pudieron cargar los datos</td></tr>';
+    console.log(err);
   }
 }
 
@@ -88,8 +151,8 @@ async function cargarPiezas() {
       fila.innerHTML = `
         <td>${pieza.nombre}</td>
         <td class="mono">${pieza.norma || '—'}</td>
-        <td class="mono">${pieza.od_ref ? pieza.od_ref + ' mm' : '—'}</td>
-        <td class="mono">${pieza.id_ref ? pieza.id_ref + ' mm' : '—'}</td>
+        <td class="mono">${pieza.alto_ref ? pieza.alto_ref + ' mm' : '—'}</td>
+        <td class="mono">${pieza.ancho_ref ? pieza.ancho_ref + ' mm' : '—'}</td>
         <td><span class="pill pend" style="cursor:pointer">editar</span></td>
       `;
       tbody.appendChild(fila);
@@ -100,39 +163,120 @@ async function cargarPiezas() {
 }
 
 // ── CARGAR SENSORES DESDE EL BACKEND ────────────────────────
+function actualizarSensorPresencia(id, activo) {
+  const dot   = document.getElementById(`${id}-dot`);
+  const texto = document.getElementById(`${id}-text`);
+  if (dot)   dot.classList.toggle('on', !!activo);
+  if (texto) texto.textContent = activo ? 'Activado' : 'Libre';
+}
+
+function actualizarPuerta(cerrada) {
+  const dot   = document.getElementById('puerta-dot');
+  const texto = document.getElementById('puerta-text');
+  if (dot) dot.classList.toggle('on', !!cerrada);
+  if (texto) {
+    texto.textContent = cerrada ? 'Cerrada' : 'Abierta';
+    texto.style.color = cerrada ? 'var(--verde)' : 'var(--rojo)';
+  }
+}
+
+async function cargarEstadoCiclo() {
+  try {
+    const res  = await fetch(`${API}/estado_ciclo`);
+    const data = await res.json();
+    document.getElementById('estado-ciclo-texto').textContent = data.estado;
+  } catch (err) {
+    console.log('No se pudo cargar el estado del ciclo');
+  }
+}
+
 async function cargarSensores() {
   try {
-    const res = await fetch(`${API}/sensores`);
+    const res  = await fetch(`${API}/sensores`);
     const data = await res.json();
-
-    document.getElementById('sensor-s1').textContent  = data.S1  !== null ? data.S1  + ' mm' : '— mm';
-    document.getElementById('sensor-s2').textContent  = data.S2  !== null ? data.S2  + ' mm' : '— mm';
-    document.getElementById('sensor-s2p').textContent = data.S2p !== null ? data.S2p + ' mm' : '— mm';
-    document.getElementById('sensor-s3').textContent  = data.S3  !== null ? data.S3  + ' mm' : '— mm';
-    document.getElementById('sensor-s3p').textContent = data.S3p !== null ? data.S3p + ' mm' : '— mm';
-
-    const resCalib = await fetch(`${API}/calibracion`);
-    const calib = await resCalib.json();
-
-    if (calib.ref_s1 && data.S1 !== null) {
-      const alto = (calib.ref_s1 - data.S1).toFixed(1);
-      document.getElementById('dim-alto').textContent = alto + ' mm';
-    }
-    if (calib.d_s2_s2p && data.S2 !== null && data.S2p !== null) {
-      const ancho = (calib.d_s2_s2p - data.S2 - data.S2p).toFixed(1);
-      document.getElementById('dim-ancho').textContent = ancho + ' mm';
-    }
-    if (calib.d_s3_s3p && data.S3 !== null && data.S3p !== null) {
-      const largo = (calib.d_s3_s3p - data.S3 - data.S3p).toFixed(1);
-      document.getElementById('dim-largo').textContent = largo + ' mm';
-    }
-
-    const alerta = document.getElementById('sensor-alerta');
-    const algunNull = Object.values(data).some(v => v === null);
-    alerta.style.display = algunNull ? 'block' : 'none';
-
+    actualizarSensorPresencia('fc-superior', data.final_carrera_superior);
+    actualizarSensorPresencia('fc-inferior', data.final_carrera_inferior);
+    actualizarPuerta(data.puerta_cerrada);
   } catch (err) {
     console.log('No se pudieron cargar los sensores');
+  }
+
+  try {
+    const res  = await fetch(`${API}/plato`);
+    const data = await res.json();
+    document.getElementById('plato-estado').textContent  = data.girando ? 'Girando' : 'Detenido';
+    document.getElementById('plato-angulo').textContent  = data.angulo_actual != null ? data.angulo_actual + '°' : '— °';
+  } catch (err) {
+    console.log('No se pudo cargar el estado del plato');
+  }
+
+  try {
+    const res    = await fetch(`${API}/captura`);
+    const data   = await res.json();
+    const angulos = (data.capturas || []).map(c => c.angulo);
+    document.getElementById('captura-cantidad').textContent = `${angulos.length} / 8`;
+    document.getElementById('captura-angulos').textContent  = angulos.length ? angulos.map(a => a + '°').join(', ') : '—';
+  } catch (err) {
+    console.log('No se pudo cargar el estado de las capturas');
+  }
+
+  await cargarEstadoCiclo();
+}
+
+// ── CARGAR SERVOS DESDE EL BACKEND ──────────────────────────
+async function cargarServos() {
+  try {
+    const res  = await fetch(`${API}/servos`);
+    const data = await res.json();
+    const actualizar = (id, activo) => {
+      const dot   = document.getElementById(`${id}-dot`);
+      const texto = document.getElementById(`${id}-text`);
+      if (dot)   dot.classList.toggle('on', !!activo);
+      if (texto) texto.textContent = activo ? 'Activo' : 'Inactivo';
+    };
+    actualizar('rotacion',  data.rotacion?.activo);
+    actualizar('empujador', data.empujador?.activo);
+
+    const posicion = data.plataforma?.posicion || 'centro';
+    const definida = posicion === 'izquierda' || posicion === 'derecha';
+    const dot   = document.getElementById('plataforma-dot');
+    const texto = document.getElementById('plataforma-text');
+    if (dot) {
+      dot.classList.toggle('on', definida);
+      dot.classList.toggle('neutral', !definida);
+    }
+    if (texto) texto.textContent = posicion.charAt(0).toUpperCase() + posicion.slice(1);
+  } catch (err) {
+    console.log('No se pudieron cargar los servos');
+  }
+}
+
+// ── CARGAR ULTIMA INSPECCION EN VIVO ────────────────────────
+async function cargarUltimaInspeccion() {
+  try {
+    const res  = await fetch(`${API}/inspecciones`);
+    const data = await res.json();
+    if (data.length === 0) return;
+
+    const insp = data[0];
+    document.getElementById('insp-tipo').textContent     = insp.pieza    || '—';
+    document.getElementById('insp-numero-serie').textContent = insp.numero_serie || '—';
+    document.getElementById('insp-norma').textContent    = '—';
+    document.getElementById('insp-alto').textContent     = insp.alto     ? insp.alto.toFixed(1)  + ' mm' : '— mm';
+    document.getElementById('insp-ancho').textContent    = insp.ancho    ? insp.ancho.toFixed(1) + ' mm' : '— mm';
+    document.getElementById('insp-largo').textContent    = insp.largo    ? insp.largo.toFixed(1) + ' mm' : '— mm';
+    document.getElementById('insp-operario').textContent = insp.operario || '—';
+
+    const aprobada = insp.resultado === 'APROBADA';
+    document.getElementById('insp-resultado-box').className       = aprobada ? 'result-box ok' : 'result-box fail';
+    document.getElementById('insp-resultado-icon').textContent    = aprobada ? '✓' : '✗';
+    document.getElementById('insp-resultado-titulo').textContent  = insp.resultado;
+    document.getElementById('insp-resultado-sub').textContent     = aprobada
+      ? 'Todas las dimensiones dentro de tolerancia'
+      : 'Una o más dimensiones fuera de tolerancia';
+
+  } catch (err) {
+    console.log('No se pudo cargar la última inspección');
   }
 }
 
@@ -140,23 +284,29 @@ async function cargarSensores() {
 cargarInspecciones();
 cargarPiezas();
 cargarSensores();
-setInterval(cargarInspecciones, 5000);
-setInterval(cargarSensores, 2000);
+cargarUltimaInspeccion();
+cargarHistorial();
+cargarServos();
+setInterval(cargarInspecciones,    5000);
+setInterval(cargarSensores,        2000);
+setInterval(cargarUltimaInspeccion,3000);
+setInterval(cargarHistorial,      10000);
+setInterval(cargarServos,          2000);
 
 // ── GUARDAR PIEZA ──────────────────────────────────────
 async function guardarPieza() {
   const datos = {
     nombre:    document.getElementById('pieza-nombre').value,
     norma:     document.getElementById('pieza-norma').value,
-    od_ref:    parseFloat(document.getElementById('pieza-od-ref').value),
-    od_tol:    parseFloat(document.getElementById('pieza-od-tol').value),
-    id_ref:    parseFloat(document.getElementById('pieza-id-ref').value),
-    id_tol:    parseFloat(document.getElementById('pieza-id-tol').value),
+    alto_ref:  parseFloat(document.getElementById('pieza-alto-ref').value),
+    alto_tol:  parseFloat(document.getElementById('pieza-alto-tol').value),
+    ancho_ref: parseFloat(document.getElementById('pieza-ancho-ref').value),
+    ancho_tol: parseFloat(document.getElementById('pieza-ancho-tol').value),
     largo_ref: parseFloat(document.getElementById('pieza-largo-ref').value),
     largo_tol: parseFloat(document.getElementById('pieza-largo-tol').value),
   };
 
-  const respuesta = await fetch('http://127.0.0.1:5000/piezas', {
+  const respuesta = await fetch(`${API}/piezas`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(datos)
@@ -164,8 +314,7 @@ async function guardarPieza() {
 
   if (respuesta.ok) {
     const resultado = await respuesta.json();
-    const idPieza = resultado.id;
-    generarQR(datos.nombre, datos.norma, idPieza);
+    generarQR(datos.nombre, datos.norma, resultado.id);
     setTimeout(() => {
       alert('✅ Pieza guardada correctamente');
       toggleForm();
@@ -179,11 +328,9 @@ async function guardarPieza() {
 function generarQR(nombre, norma, id) {
   const contenedor = document.getElementById('qr-canvas');
   contenedor.innerHTML = '';
-  const texto = `DIMENSIA|${id}|${nombre}|${norma}`;
   new QRCode(contenedor, {
-    text: texto,
-    width: 80,
-    height: 80,
+    text: `DIMENSIA|${id}|${nombre}|${norma}`,
+    width: 80, height: 80,
   });
 }
 
@@ -193,68 +340,149 @@ let operarioActual = null;
 function iniciarSesion() {
   const nombre = document.getElementById('login-nombre').value.trim();
   const legajo = document.getElementById('login-legajo').value.trim();
-
-  if (!nombre || !legajo) {
-    alert('⚠️ Completá tu nombre y legajo para continuar');
-    return;
-  }
-
+  if (!nombre || !legajo) { alert('⚠️ Completá tu nombre y legajo para continuar'); return; }
   operarioActual = { nombre, legajo };
-
   fetch('http://127.0.0.1:5000/operario_activo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ operario: nombre, legajo: legajo })
   });
-
   const badge = document.getElementById('operario-badge');
-  badge.textContent = `👤 ${nombre} — Legajo ${legajo}`;
+  badge.textContent  = `👤 ${nombre} — Legajo ${legajo}`;
   badge.style.display = 'block';
   document.getElementById('login-screen').style.display = 'none';
 }
 
 // ── EXPORTAR CSV ──────────────────────────────────────
-function exportarCSV() {
-  const encabezado = ['#', 'Pieza', 'Alto (mm)', 'Ancho (mm)', 'Largo (mm)', 'Estado', 'Fecha y Hora'];
-  const datos = [
-    ['247', 'Niple NPT 1/2"', '21.3', '21.3', '58.2', 'Aprobada', 'Hoy 14:32'],
-    ['246', 'Brida DN25',     '25.8', '25.8', '42.1', 'Rechazada','Hoy 14:31'],
-    ['245', 'Union NPT 3/4"', '26.7', '26.7', '65.0', 'Aprobada', 'Hoy 14:29'],
-    ['244', 'Niple NPT 1/2"', '21.3', '21.3', '57.9', 'Aprobada', 'Hoy 14:28'],
-    ['243', 'Codo 90° 1/2"',  '21.3', '21.3', '38.5', 'Aprobada', 'Hoy 14:26'],
-    ['242', 'Brida DN25',     '25.8', '25.8', '41.9', 'Rechazada','Hoy 14:24'],
-  ];
+async function exportarCSV() {
+  try {
+    const res = await fetch(`${API}/exportar`);
+    if (!res.ok) { alert('No hay inspecciones para exportar.'); return; }
+    const blob = await res.blob();
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = 'inspecciones_dimensia.csv';
+    a.click();
+  } catch (err) {
+    alert('Error al conectar con el backend para exportar.');
+  }
+}
 
-  const csv = [encabezado, ...datos].map(f => f.join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'inspecciones_dimensia.csv';
-  a.click();
+// ── CARGAR HISTORIAL DESDE EL BACKEND ───────────────────────
+let historialData = [];
+
+async function cargarHistorial() {
+  try {
+    const res  = await fetch(`${API}/inspecciones`);
+    const data = await res.json();
+    historialData = Array.isArray(data) ? data : [];
+    filtrarHistorial();
+  } catch (err) {
+    console.log('No se pudo cargar el historial');
+  }
+}
+
+// ── FILTRAR HISTORIAL POR N° DE SERIE (tiempo real, case-insensitive) ──
+function filtrarHistorial() {
+  const input   = document.getElementById('filtro-serie');
+  const busqueda = input ? input.value.trim().toLowerCase() : '';
+
+  const data = busqueda
+    ? historialData.filter(insp =>
+        (insp.numero_serie || '').toLowerCase().includes(busqueda))
+    : historialData;
+
+  renderHistorial(data);
+}
+
+function renderHistorial(data) {
+  const tbody = document.getElementById('historial-table');
+  if (!tbody) return;
+
+  if (data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
+  } else {
+    tbody.innerHTML = '';
+    data.forEach(insp => {
+      const fila  = document.createElement('tr');
+      const fecha = insp.fecha ? insp.fecha.replace('T', ' ').substring(0, 16) : '—';
+      fila.innerHTML = `
+        <td class="mono gray">#${insp.id}</td>
+        <td>${insp.pieza || '—'}</td>
+        <td class="mono">${insp.numero_serie || '—'}</td>
+        <td class="mono">${insp.alto  ? insp.alto.toFixed(1)  : '—'}</td>
+        <td class="mono">${insp.ancho ? insp.ancho.toFixed(1) : '—'}</td>
+        <td class="mono">${insp.largo ? insp.largo.toFixed(1) : '—'}</td>
+        <td><span class="pill ${insp.resultado === 'APROBADA' ? 'ok' : 'fail'}">${insp.resultado}</span></td>
+        <td>${insp.resultado === 'APROBADA' || insp.motivo_rechazo == null ? '—' : insp.motivo_rechazo}</td>
+        <td class="gray small">${fecha}</td>
+      `;
+      tbody.appendChild(fila);
+    });
+  }
+
+  const contador = document.querySelector('#page-historial .card-title');
+  if (contador) contador.textContent = `${data.length} inspecciones encontradas`;
 }
 
 // ── CALIBRACION ──────────────────────────────────────
-async function iniciarCalibracion() {
-  const estado = document.getElementById('calib-estado');
-  const resultados = document.getElementById('calib-resultados');
-  const valores = document.getElementById('calib-valores');
+async function cargarCalibracion() {
+  const tbody = document.getElementById('calibracion-table');
+  if (!tbody) return;
 
-  estado.textContent = 'Conectando con el backend...';
-  resultados.style.display = 'none';
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">Consultando backend...</td></tr>';
 
   try {
-    const res = await fetch(`${API}/calibracion`, { method: 'POST' });
-    const data = await res.json();
+    let calibraciones = [];
 
-    estado.textContent = '';
-    valores.textContent =
-      `REF_S1: ${data.REF_S1} mm  |  ` +
-      `D_S2_S2p: ${data.D_S2_S2p} mm  |  ` +
-      `D_S3_S3p: ${data.D_S3_S3p} mm`;
-    resultados.style.display = 'block';
+    try {
+      const res = await fetch(`${API}/calibraciones`);
+      const data = await res.json();
+      calibraciones = Array.isArray(data) ? data.slice(0, 5) : [];
+    } catch (_) {
+      const res = await fetch(`${API}/calibracion`);
+      const data = await res.json();
+      if (data && Object.keys(data).length > 0) calibraciones = [data];
+    }
 
+    if (calibraciones.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">Sin calibraciones registradas</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = '';
+    calibraciones.forEach(cal => {
+      const fecha = cal.fecha ? cal.fecha.replace('T', ' ').substring(0, 19) : '—';
+      const sup = cal.px_por_mm_superior;
+      const lat = cal.px_por_mm_lateral;
+
+      let consistenciaHTML = '—';
+      if (sup != null && lat != null) {
+        const diff = Math.abs(sup - lat);
+        consistenciaHTML = diff < 0.5
+          ? '<span class="pill ok">OK</span>'
+          : '<span class="pill" style="background:#FEF3C7;color:#92400E">Revisar</span>';
+      }
+
+      let vigenciaHTML = '—';
+      if (cal.fecha) {
+        const horasDesde = (Date.now() - new Date(cal.fecha).getTime()) / 3600000;
+        vigenciaHTML = horasDesde < 24
+          ? '<span class="pill ok">Vigente</span>'
+          : '<span class="pill fail">Vencida</span>';
+      }
+
+      const fila = document.createElement('tr');
+      fila.innerHTML = `
+        <td class="gray small">${fecha}</td>
+        <td class="mono">${sup != null ? sup + ' px/mm' : '—'}</td>
+        <td class="mono">${lat != null ? lat + ' px/mm' : '—'}</td>
+        <td>${consistenciaHTML}</td>
+        <td>${vigenciaHTML}</td>
+      `;
+      tbody.appendChild(fila);
+    });
   } catch (err) {
-    estado.textContent = 'Error: no se pudo conectar con el backend.';
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9AA3B8;padding:16px">Error: no se pudo conectar con el backend</td></tr>';
   }
 }
