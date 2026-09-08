@@ -198,22 +198,26 @@ def get_plato():
 
 # Estado de los 3 servos en memoria
 estado_servos = {
-    'servo1': {'activo': False, 'nombre': 'Empuje al plato'},
-    'servo2': {'activo': False, 'nombre': 'Salida aprobada'},
-    'servo3': {'activo': False, 'nombre': 'Rechazador'},
+    'rotacion':   {'activo': False, 'nombre': 'Rotacion del plato'},
+    'empujador':  {'activo': False, 'nombre': 'Brazo empujador'},
+    'plataforma': {'posicion': 'centro', 'nombre': 'Plataforma clasificadora'},
 }
 
 # Recibir estado de los servos desde el ESP32
 @app.route('/servos', methods=['POST'])
 def set_servos():
     datos = request.get_json()
-    for key in ('servo1', 'servo2', 'servo3'):
+    for key in ('rotacion', 'empujador'):
         if key in datos:
             valor = datos[key]
             if isinstance(valor, str):
                 estado_servos[key]['activo'] = valor.lower() == 'activo'
             else:
                 estado_servos[key]['activo'] = bool(valor)
+    if 'plataforma' in datos:
+        valor = datos['plataforma']
+        if isinstance(valor, str) and valor.lower() in ('centro', 'izquierda', 'derecha'):
+            estado_servos['plataforma']['posicion'] = valor.lower()
     return jsonify({'estado': 'ok'})
 
 # Obtener estado actual de los 3 servos
