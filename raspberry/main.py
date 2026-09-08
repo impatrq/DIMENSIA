@@ -1,12 +1,12 @@
 # Puente principal — Raspberry Pi 4
-# Lee el QR de la pieza, recibe el evento de la ESP32, dispara el ciclo de
-# captura con las dos cámaras, consolida medidas y manda el resultado al backend Flask
+# Espera el evento de la ESP32 por Serial, ejecuta el ciclo de captura
+# con las dos cámaras, consolida medidas y manda el resultado al backend Flask.
+# La pieza se selecciona en la pantalla táctil antes del ciclo; ya no hay QR.
 # Requiere: pip install pyserial requests opencv-python numpy
 
 import sys
 import os
 import json
-import threading
 import time
 import requests
 
@@ -18,68 +18,20 @@ from procesamiento import ProcesadorImagenes
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "database"))
 from db import BaseDatos
 
-_URL_BACKEND      = "http://localhost:5000/inspeccion"
-_RUTA_CALIBRACION = os.path.join(os.path.dirname(__file__), "calibracion.json")
-_ANGULOS          = [0, 45, 90, 135, 180, 225, 270, 315]
+_URL_BACKEND = "http://localhost:5000"
 
-# Pieza actualmente cargada por el lector QR.
-# Es None si todavía no se escaneó ninguna.
-pieza_actual = None
+# Tiempo de giro que la Raspberry Pi le ordena a la ESP32 por cada ángulo.
+# Valor de ejemplo — calibrar con el hardware real usando servo_plato.calibrar_paso().
+TIEMPO_GIRO_MS = 500
 
 
-def leer_qr_loop(db):
+def _enviar_serial(receptor, datos):
     """
-    Corre en un hilo separado. Escucha el lector QR USB,
-    que se comporta como un teclado y manda texto + Enter.
-    Cuando detecta un QR válido de DIMENSIA, carga la pieza desde la DB.
+    Escribe un dict como JSON en el puerto Serial hacia la ESP32.
+    Usa la conexión subyacente del ReceptorSerial para no duplicar el objeto.
     """
-    global pieza_actual
-
-    while True:
-        try:
-            linea = input().strip()
-        except EOFError:
-            # Puede pasar si stdin se cierra; simplemente ignorar
-            continue
-
-        if not linea.startswith("DIMENSIA|"):
-            continue
-
-        # Formato esperado: DIMENSIA|{id}|{nombre}|{norma}
-        partes = linea.split("|")
-        if len(partes) < 2:
-            print("QR inválido: {}".format(linea))
-            continue
-
-        id_pieza = partes[1]
-
-        cursor = db.conexion.execute(
-            "SELECT * FROM piezas WHERE id = ?", (id_pieza,)
-        )
-        fila = cursor.fetchone()
-
-        if fila is None:
-            print("Pieza no encontrada en DB: {}".format(id_pieza))
-            pieza_actual = None
-        else:
-            pieza_actual = dict(fila)
-            print('Pieza cargada: {} ({})'.format(
-                pieza_actual.get("nombre", "?"),
-                pieza_actual.get("norma", "?"),
-            ))
-
-
-def cargar_calibracion():
-    """
-    Lee raspberry/calibracion.json con los valores de referencia del banco de medición.
-    Devuelve el dict de calibración o None si el archivo no existe.
-    """
-    if not os.path.exists(_RUTA_CALIBRACION):
-        print("AVISO: calibracion.json no encontrado. Las dimensiones no se calcularán.")
-        return None
-
-    with open(_RUTA_CALIBRACION, "r") as f:
-        return json.load(f)
+    linea = (json.dumps(datos) + "\n").encode("utf-8")
+    receptor.conexion.write(linea)
 
 
 def obtener_operario():
@@ -88,37 +40,59 @@ def obtener_operario():
     Si el backend no responde, devuelve un valor por defecto sin romper el loop.
     """
     try:
-        respuesta = requests.get("http://localhost:5000/operario_activo", timeout=2)
+        respuesta = requests.get(_URL_BACKEND + "/operario_activo", timeout=2)
         return respuesta.json()
     except Exception:
         return {"operario": "Sin identificar", "legajo": ""}
 
 
-def ejecutar_ciclo_inspeccion(pieza, camaras, procesador):
+def obtener_pieza_activa():
+    """
+    Consulta al backend la pieza que el operario seleccionó en la pantalla táctil.
+    Devuelve el dict de la pieza o None si no hay ninguna seleccionada.
+    """
+    try:
+        respuesta = requests.get(_URL_BACKEND + "/pieza_activa", timeout=2)
+        datos = respuesta.json()
+        # El endpoint devuelve {} si no hay pieza seleccionada
+        return datos if datos else None
+    except Exception:
+        return None
+
+
+def ejecutar_ciclo_inspeccion(pieza, camaras, procesador, receptor):
     """
     Ciclo completo de inspección por visión:
-    1. Gira el plato a cada ángulo (8 posiciones de 45° en 45°)
-    2. Captura imagen con las dos cámaras
-    3. Procesa las imágenes para extraer dimensiones
-    4. Promedia las medidas de las 8 capturas
-    5. Evalúa contra tolerancias y devuelve el resultado
+    1. Para cada uno de los 8 ángulos:
+       - Manda comando de giro a la ESP32 por Serial
+       - Espera confirmación de la ESP32 por Serial
+       - Captura imágenes con las dos cámaras
+       - Procesa las imágenes para extraer dimensiones
+    2. Promedia las medidas de las 8 capturas
+    3. Evalúa contra tolerancias
+    4. Manda el resultado final a la ESP32 por Serial
+    5. Devuelve el dict con medidas y resultado
     """
     acum_diametro = []
     acum_largo    = []
     acum_alto     = []
 
-    for angulo in _ANGULOS:
-        # Indicar al backend (que controla el motor) que gire al siguiente ángulo
-        try:
-            requests.post("http://localhost:5000/angulo", json={"angulo": angulo}, timeout=3)
-        except Exception:
-            print("Aviso: no se pudo enviar ángulo {} al backend.".format(angulo))
+    for n_angulo in range(8):
+        angulo_grados = n_angulo * 45
 
-        # Esperar a que el plato giratorio se estabilice
-        time.sleep(1)
+        # Mandar comando de giro a la ESP32 por Serial
+        _enviar_serial(receptor, {"comando": "girar", "tiempo_ms": TIEMPO_GIRO_MS})
 
-        # Capturar con las dos cámaras
-        capturas = camaras.capturar(angulo)
+        # Esperar la confirmación antes de capturar — el plato tiene que estar quieto
+        while True:
+            confirmacion = receptor.leer_siguiente()
+            if confirmacion is None:
+                continue
+            if confirmacion.get("evento") == "giro_completado":
+                break
+
+        # Capturar con las dos cámaras ahora que el plato está en posición
+        capturas = camaras.capturar(angulo_grados)
 
         # Procesar las imágenes y obtener dimensiones para este ángulo
         medidas = procesador.procesar_ciclo_completo(capturas)
@@ -132,11 +106,28 @@ def ejecutar_ciclo_inspeccion(pieza, camaras, procesador):
             acum_alto.append(medidas["alto_mm"])
 
         print("  Ángulo {}° → OD: {}mm  largo: {}mm  alto: {}mm".format(
-            angulo,
+            angulo_grados,
             medidas["diametro_exterior_mm"],
             medidas["largo_mm"],
             medidas["alto_mm"],
         ))
+
+        # Notificar al dashboard el progreso del plato (informativo, no bloquea)
+        try:
+            requests.post(_URL_BACKEND + "/plato", timeout=1, json={
+                "girando": False,
+                "angulo_actual": angulo_grados,
+                "capturas_completadas": n_angulo + 1,
+            })
+        except Exception:
+            pass
+
+        try:
+            requests.post(_URL_BACKEND + "/captura", timeout=1, json={
+                "total": n_angulo + 1,
+            })
+        except Exception:
+            pass
 
     # Calcular el promedio de cada medida a partir de las 8 capturas
     od_prom    = round(sum(acum_diametro) / len(acum_diametro), 1) if acum_diametro else None
@@ -154,6 +145,9 @@ def ejecutar_ciclo_inspeccion(pieza, camaras, procesador):
 
     resultado = "APROBADA" if (od_ok and largo_ok) else "RECHAZADA"
 
+    # Mandar el resultado a la ESP32 para que clasifique la pieza (paleta + brazo)
+    _enviar_serial(receptor, {"resultado": resultado})
+
     return {
         "diametro_exterior_mm": od_prom,
         "largo_mm":             largo_prom,
@@ -168,14 +162,7 @@ def main():
     camaras    = GestorCamaras()
     procesador = ProcesadorImagenes()
 
-    # Cargar la calibración de sensores al arrancar
-    calibracion = cargar_calibracion()
-
-    # El hilo del QR corre como daemon para que muera solo cuando termina el programa
-    hilo_qr = threading.Thread(target=leer_qr_loop, args=(db,), daemon=True)
-    hilo_qr.start()
-
-    print("Sistema listo. Esperando QR y evento de pieza...\n")
+    print("Sistema listo. Esperando señal de la ESP32...\n")
 
     try:
         while True:
@@ -184,45 +171,39 @@ def main():
             if datos is None:
                 continue
 
-            # Ignorar cualquier mensaje que no sea el evento de pieza lista
-            if datos.get("evento") != "pieza_lista":
+            # Esperar el evento que indica que la pieza está en posición de medición.
+            # Lo dispara la ESP32 cuando el elevador llega arriba.
+            if datos.get("evento") != "listo_para_medir":
                 continue
 
-            # Sin pieza escaneada no tiene sentido iniciar la inspección
-            if pieza_actual is None:
-                print("Esperando QR...")
+            # Leer la pieza que el operario seleccionó en la pantalla táctil
+            pieza = obtener_pieza_activa()
+            if pieza is None:
+                print("Sin pieza seleccionada en la pantalla. Esperando...")
                 continue
 
-            print("Pieza lista detectada. Iniciando ciclo de inspección...")
-            print("Pieza: {} | {}".format(
-                pieza_actual["nombre"], pieza_actual["norma"]
-            ))
+            print("Pieza lista. Iniciando ciclo de inspección...")
+            print("Pieza: {} | {}".format(pieza.get("nombre", "?"), pieza.get("norma", "?")))
 
-            # Ejecutar el ciclo completo de captura y procesamiento
-            resultado_ciclo = ejecutar_ciclo_inspeccion(pieza_actual, camaras, procesador)
+            # Ejecutar el ciclo completo de captura, procesamiento y clasificación
+            resultado_ciclo = ejecutar_ciclo_inspeccion(pieza, camaras, procesador, receptor)
 
             operario_data = obtener_operario()
 
             payload = {
-                "pieza":     pieza_actual["nombre"],
+                "pieza":     pieza["nombre"],
                 "largo":     resultado_ciclo["largo_mm"],
                 "od":        resultado_ciclo["diametro_exterior_mm"],
                 "id":        None,
                 "resultado": resultado_ciclo["resultado"],
                 "operario":  operario_data["operario"],
                 "legajo":    operario_data["legajo"],
-                "s1_raw":    None,
-                "s2_raw":    None,
-                "s2p_raw":   None,
-                "s3_raw":    None,
-                "s3p_raw":   None,
             }
 
             try:
-                requests.post(_URL_BACKEND, json=payload, timeout=3)
+                requests.post(_URL_BACKEND + "/inspeccion", json=payload, timeout=3)
             except requests.exceptions.RequestException as e:
                 print("Error al enviar al backend: {}".format(e))
-                continue
 
             print("Enviado: {} | OD:{}mm largo:{}mm alto:{}mm | operario: {}".format(
                 resultado_ciclo["resultado"],

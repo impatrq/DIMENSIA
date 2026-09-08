@@ -11,9 +11,10 @@ class Comunicacion:
 
     def enviar_mediciones(self, mediciones):
         """
-        Recibe el dict con las 5 lecturas brutas (s1, s2, s2p, s3, s3p),
-        le agrega el timestamp y lo manda por Serial como una línea JSON.
-        La Raspberry Pi lee línea por línea y parsea cada JSON recibido.
+        Recibe cualquier dict, le agrega el timestamp y lo manda por Serial
+        como una línea JSON. La Raspberry Pi lee línea por línea y parsea
+        cada JSON recibido.
+        # Se va a reusar para el nuevo payload del elevador (finales de carrera).
         """
         datos = dict(mediciones)
         datos["timestamp"] = ticks_ms()  # ms desde que arrancó la ESP32
