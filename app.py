@@ -1,8 +1,9 @@
 import io
+import os
 import csv
-from flask import Flask, jsonify, request, Response
+from flask import Flask, jsonify, request, Response, send_file, abort
 from flask_cors import CORS
-from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas, guardar_pieza, guardar_calibracion, obtener_calibracion, obtener_calibraciones
+from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas, guardar_pieza, guardar_calibracion, obtener_calibracion, obtener_calibraciones, obtener_capturas, CARPETA_CAPTURAS
 
 app = Flask(__name__) 
 CORS(app)
@@ -224,6 +225,28 @@ def set_servos():
 @app.route('/servos', methods=['GET'])
 def get_servos():
     return jsonify(estado_servos)
+
+# ── CAPTURAS DE CAMARA POR INSPECCION ────────────────
+TIPOS_CAPTURA_VALIDOS = ('superior', 'lateral')
+
+# Obtener las URLs de las capturas disponibles de una inspeccion
+@app.route('/capturas/<int:inspeccion_id>', methods=['GET'])
+def get_capturas_inspeccion(inspeccion_id):
+    capturas_db = obtener_capturas(inspeccion_id)
+    return jsonify({
+        tipo: f'/capturas/{inspeccion_id}/{tipo}.jpg' if ruta else None
+        for tipo, ruta in capturas_db.items()
+    })
+
+# Servir el archivo de imagen de una captura
+@app.route('/capturas/<int:inspeccion_id>/<tipo>.jpg', methods=['GET'])
+def get_captura_archivo(inspeccion_id, tipo):
+    if tipo not in TIPOS_CAPTURA_VALIDOS:
+        abort(404)
+    ruta_imagen = os.path.join(CARPETA_CAPTURAS, f'{inspeccion_id}_{tipo}.jpg')
+    if not os.path.isfile(ruta_imagen):
+        abort(404)
+    return send_file(ruta_imagen, mimetype='image/jpeg')
 
 # ── EXPORTAR CSV ────────────────────────────────────
 @app.route('/exportar', methods=['GET'])
