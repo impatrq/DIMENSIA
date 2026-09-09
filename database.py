@@ -153,6 +153,22 @@ def guardar_capturas(inspeccion_id, datos):
     conn.commit()
     conn.close()
 
+# ── OBTENER CAPTURAS DE UNA INSPECCION ───────────────
+def obtener_capturas(inspeccion_id):
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute('SELECT * FROM capturas WHERE inspeccion_id = ?', (inspeccion_id,))
+    filas = c.fetchall()
+    conn.close()
+
+    resultado = {'superior': None, 'lateral': None}
+    for fila in filas:
+        tipo = fila['tipo']
+        if tipo in resultado:
+            resultado[tipo] = fila['ruta_imagen']
+    return resultado
+
 # ── OBTENER INSPECCIONES ─────────────────────────────
 def obtener_inspecciones():
     conn = sqlite3.connect(DB)
