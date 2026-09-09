@@ -1,7 +1,10 @@
 import sqlite3
+import os
+import base64
 from datetime import datetime, timezone, timedelta
 
 DB = 'dimensia.db'
+CARPETA_CAPTURAS = 'capturas'
 
 TZ_ARG = timezone(timedelta(hours=-3))
 
@@ -54,6 +57,18 @@ def init_db():
             px_por_mm_superior  REAL,
             px_por_mm_lateral   REAL,
             fecha            TIMESTAMP
+        )
+    ''')
+
+    # Tabla de capturas de camara asociadas a cada inspeccion
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS capturas (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            inspeccion_id  INTEGER NOT NULL,
+            tipo           TEXT,
+            ruta_imagen    TEXT,
+            fecha          TIMESTAMP,
+            FOREIGN KEY (inspeccion_id) REFERENCES inspecciones (id)
         )
     ''')
 
@@ -110,8 +125,49 @@ def guardar_inspeccion(datos):
         datos.get('lectura_s3p'),
         motivo_rechazo
     ))
+    inspeccion_id = c.lastrowid
     conn.commit()
     conn.close()
+
+    guardar_capturas(inspeccion_id, datos)
+
+# ── GUARDAR CAPTURAS DE CAMARA ───────────────────────
+def guardar_capturas(inspeccion_id, datos):
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    for tipo in ('superior', 'lateral'):
+        imagen_b64 = datos.get(f'captura_{tipo}')
+        if not imagen_b64:
+            continue
+        if ',' in imagen_b64 and imagen_b64.strip().startswith('data:'):
+            imagen_b64 = imagen_b64.split(',', 1)[1]
+        os.makedirs(CARPETA_CAPTURAS, exist_ok=True)
+        nombre_archivo = f'{inspeccion_id}_{tipo}.jpg'
+        ruta_imagen = os.path.join(CARPETA_CAPTURAS, nombre_archivo)
+        with open(ruta_imagen, 'wb') as f:
+            f.write(base64.b64decode(imagen_b64))
+        c.execute('''
+            INSERT INTO capturas (inspeccion_id, tipo, ruta_imagen, fecha)
+            VALUES (?, ?, ?, ?)
+        ''', (inspeccion_id, tipo, ruta_imagen, fecha_arg()))
+    conn.commit()
+    conn.close()
+
+# ── OBTENER CAPTURAS DE UNA INSPECCION ───────────────
+def obtener_capturas(inspeccion_id):
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute('SELECT * FROM capturas WHERE inspeccion_id = ?', (inspeccion_id,))
+    filas = c.fetchall()
+    conn.close()
+
+    resultado = {'superior': None, 'lateral': None}
+    for fila in filas:
+        tipo = fila['tipo']
+        if tipo in resultado:
+            resultado[tipo] = fila['ruta_imagen']
+    return resultado
 
 # ── OBTENER INSPECCIONES ─────────────────────────────
 def obtener_inspecciones():
