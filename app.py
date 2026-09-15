@@ -3,7 +3,7 @@ import os
 import csv
 from flask import Flask, jsonify, request, Response, send_file, abort
 from flask_cors import CORS
-from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas, guardar_pieza, guardar_calibracion, obtener_calibracion, obtener_calibraciones, obtener_capturas, CARPETA_CAPTURAS
+from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas, guardar_pieza, guardar_calibracion, obtener_calibracion, obtener_calibraciones, obtener_capturas, CARPETA_CAPTURAS, fecha_arg
 
 app = Flask(__name__) 
 CORS(app)
@@ -247,6 +247,30 @@ def get_captura_archivo(inspeccion_id, tipo):
     if not os.path.isfile(ruta_imagen):
         abort(404)
     return send_file(ruta_imagen, mimetype='image/jpeg')
+
+# Alerta de hardware en memoria
+alerta_hardware = {'activa': False, 'tipo': None, 'mensaje': None, 'fecha': None}
+
+# Registrar una nueva alerta de hardware
+@app.route('/alerta_hardware', methods=['POST'])
+def set_alerta_hardware():
+    datos = request.get_json()
+    alerta_hardware['activa'] = True
+    alerta_hardware['tipo'] = datos.get('tipo')
+    alerta_hardware['mensaje'] = datos.get('mensaje')
+    alerta_hardware['fecha'] = fecha_arg()
+    return jsonify({'estado': 'ok'})
+
+# Obtener la alerta de hardware actual
+@app.route('/alerta_hardware', methods=['GET'])
+def get_alerta_hardware():
+    return jsonify(alerta_hardware)
+
+# Marcar la alerta de hardware como resuelta
+@app.route('/alerta_hardware/resolver', methods=['POST'])
+def resolver_alerta_hardware():
+    alerta_hardware['activa'] = False
+    return jsonify({'estado': 'ok'})
 
 # ── EXPORTAR CSV ────────────────────────────────────
 @app.route('/exportar', methods=['GET'])
