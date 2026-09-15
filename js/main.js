@@ -400,7 +400,7 @@ function renderHistorial(data) {
   if (!tbody) return;
 
   if (data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#9AA3B8;padding:16px">Sin inspecciones todavía</td></tr>';
   } else {
     tbody.innerHTML = '';
     data.forEach(insp => {
@@ -416,6 +416,7 @@ function renderHistorial(data) {
         <td><span class="pill ${insp.resultado === 'APROBADA' ? 'ok' : 'fail'}">${insp.resultado}</span></td>
         <td>${insp.resultado === 'APROBADA' || insp.motivo_rechazo == null ? '—' : insp.motivo_rechazo}</td>
         <td class="gray small">${fecha}</td>
+        <td><button class="btn-ghost" onclick="verCapturas(${insp.id})">Ver</button></td>
       `;
       tbody.appendChild(fila);
     });
@@ -423,6 +424,50 @@ function renderHistorial(data) {
 
   const contador = document.querySelector('#page-historial .card-title');
   if (contador) contador.textContent = `${data.length} inspecciones encontradas`;
+}
+
+// ── CAPTURAS DE CÁMARA ───────────────────────────────
+async function verCapturas(inspeccionId) {
+  try {
+    const res  = await fetch(`${API}/capturas/${inspeccionId}`);
+    const data = await res.json();
+
+    if (data.superior == null && data.lateral == null) {
+      alert('Esta inspeccion no tiene capturas disponibles');
+      return;
+    }
+
+    const superiorImg   = document.getElementById('captura-superior-img');
+    const superiorPlaceholder = document.getElementById('captura-superior-placeholder');
+    const lateralImg    = document.getElementById('captura-lateral-img');
+    const lateralPlaceholder  = document.getElementById('captura-lateral-placeholder');
+
+    if (data.superior) {
+      superiorImg.src = `${API}${data.superior}`;
+      superiorImg.style.display = 'block';
+      superiorPlaceholder.style.display = 'none';
+    } else {
+      superiorImg.style.display = 'none';
+      superiorPlaceholder.style.display = 'block';
+    }
+
+    if (data.lateral) {
+      lateralImg.src = `${API}${data.lateral}`;
+      lateralImg.style.display = 'block';
+      lateralPlaceholder.style.display = 'none';
+    } else {
+      lateralImg.style.display = 'none';
+      lateralPlaceholder.style.display = 'block';
+    }
+
+    document.getElementById('modal-capturas').style.display = 'flex';
+  } catch (err) {
+    console.log('No se pudieron cargar las capturas');
+  }
+}
+
+function cerrarModalCapturas() {
+  document.getElementById('modal-capturas').style.display = 'none';
 }
 
 // ── CALIBRACION ──────────────────────────────────────
