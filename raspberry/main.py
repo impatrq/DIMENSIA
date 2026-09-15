@@ -8,6 +8,8 @@ import sys
 import os
 import json
 import time
+import base64
+import cv2
 import requests
 
 from receptor_serial import ReceptorSerial
@@ -64,6 +66,40 @@ def obtener_pieza_activa():
         return None
 
 
+def _imagen_a_base64(ruta_imagen):
+    """
+    Carga una imagen, la redimensiona a 640px de ancho máximo y la devuelve
+    como string base64 codificada en JPG. Limitar a 640px reduce el peso del
+    payload al backend: una imagen 1920x1080 pesa ~500KB, la misma a 640px
+    pesa ~50KB, sin perder detalle relevante para la vista del dashboard.
+    Devuelve None si la imagen no se puede cargar o codificar.
+    """
+    try:
+        imagen = cv2.imread(ruta_imagen)
+        if imagen is None:
+            print("Aviso: no se pudo cargar la imagen: {}".format(ruta_imagen))
+            return None
+
+        # Redimensionar si el ancho supera 640px, manteniendo la relación de aspecto
+        alto_original, ancho_original = imagen.shape[:2]
+        if ancho_original > 640:
+            factor     = 640 / ancho_original
+            nuevo_alto = int(alto_original * factor)
+            imagen     = cv2.resize(imagen, (640, nuevo_alto))
+
+        # Codificar a JPG en memoria (sin escribir al disco) y luego a base64
+        ok, buffer = cv2.imencode(".jpg", imagen)
+        if not ok:
+            print("Aviso: no se pudo codificar a JPG: {}".format(ruta_imagen))
+            return None
+
+        return base64.b64encode(buffer.tobytes()).decode("utf-8")
+
+    except Exception as e:
+        print("Aviso: error al procesar la imagen {}: {}".format(ruta_imagen, e))
+        return None
+
+
 def ejecutar_ciclo_inspeccion(pieza, camaras, procesador, receptor):
     """
     Ciclo completo de inspección por visión:
@@ -77,9 +113,10 @@ def ejecutar_ciclo_inspeccion(pieza, camaras, procesador, receptor):
     4. Manda el resultado final a la ESP32 por Serial
     5. Devuelve el dict con medidas y resultado
     """
-    acum_diametro = []
-    acum_largo    = []
-    acum_alto     = []
+    acum_diametro  = []
+    acum_largo     = []
+    acum_alto      = []
+    capturas_angulo_0 = None  # se guarda el ángulo 0 como captura representativa
 
     for n_angulo in range(8):
         angulo_grados = n_angulo * 45
@@ -109,6 +146,12 @@ def ejecutar_ciclo_inspeccion(pieza, camaras, procesador, receptor):
 
         # Capturar con las dos cámaras ahora que el plato está en posición
         capturas = camaras.capturar(angulo_grados)
+
+        # Guardar las capturas del ángulo 0 como representativas para el dashboard.
+        # Se elige el ángulo 0 porque es la posición inicial conocida y consistente
+        # entre inspecciones — facilita la comparación visual en el historial.
+        if n_angulo == 0:
+            capturas_angulo_0 = capturas
 
         # Procesar las imágenes y obtener dimensiones para este ángulo
         medidas = procesador.procesar_ciclo_completo(capturas)
@@ -164,11 +207,20 @@ def ejecutar_ciclo_inspeccion(pieza, camaras, procesador, receptor):
     # Mandar el resultado a la ESP32 para que clasifique la pieza (paleta + brazo)
     _enviar_serial(receptor, {"resultado": resultado})
 
+    # Codificar las capturas representativas (ángulo 0) en base64 para el dashboard
+    captura_superior_b64 = None
+    captura_lateral_b64  = None
+    if capturas_angulo_0:
+        captura_superior_b64 = _imagen_a_base64(capturas_angulo_0.get("superior"))
+        captura_lateral_b64  = _imagen_a_base64(capturas_angulo_0.get("lateral"))
+
     return {
         "diametro_exterior_mm": od_prom,
         "largo_mm":             largo_prom,
         "alto_mm":              alto_prom,
         "resultado":            resultado,
+        "captura_superior":     captura_superior_b64,
+        "captura_lateral":      captura_lateral_b64,
     }
 
 
