@@ -90,6 +90,27 @@ async function cargarInspecciones() {
   }
 }
 
+// ── ALERTA DE HARDWARE ────────────────────────────────────────
+async function cargarAlertaHardware() {
+  try {
+    const res = await fetch(`${API}/alerta_hardware`);
+    const data = await res.json();
+    const alerta = document.getElementById('alerta-hardware');
+    const alertaTexto = document.getElementById('alerta-hardware-texto');
+    if (!alerta || !alertaTexto) return;
+
+    if (data.activa) {
+      alertaTexto.innerHTML = `<strong>⚠ Alerta de hardware:</strong> ${data.mensaje}. Tipo: ${data.tipo}.`;
+      alerta.style.display = 'flex';
+    } else {
+      alertaTexto.innerHTML = '';
+      alerta.style.display = 'none';
+    }
+  } catch (err) {
+    console.log('No se pudo cargar la alerta de hardware');
+  }
+}
+
 // ── CARGAR REPORTES POR PIEZA ────────────────────────────────
 async function cargarReportes() {
   const tbody = document.getElementById('reportes-table-body');
@@ -287,11 +308,13 @@ cargarSensores();
 cargarUltimaInspeccion();
 cargarHistorial();
 cargarServos();
+cargarAlertaHardware();
 setInterval(cargarInspecciones,    5000);
 setInterval(cargarSensores,        2000);
 setInterval(cargarUltimaInspeccion,3000);
 setInterval(cargarHistorial,      10000);
 setInterval(cargarServos,          2000);
+setInterval(cargarAlertaHardware,  5000);
 
 // ── GUARDAR PIEZA ──────────────────────────────────────
 async function guardarPieza() {
