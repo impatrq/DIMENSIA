@@ -201,6 +201,30 @@ def guardar_pieza(datos):
     conn.close()
     return ultimo_id
 
+# ── EDITAR PIEZA ──────────────────────────────────────
+def editar_pieza(id_pieza, datos):
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute('''
+        UPDATE piezas
+        SET nombre = ?, norma = ?, alto_ref = ?, alto_tol = ?, ancho_ref = ?, ancho_tol = ?, largo_ref = ?, largo_tol = ?
+        WHERE id = ?
+    ''', (
+        datos.get('nombre'),
+        datos.get('norma'),
+        datos.get('alto_ref'),
+        datos.get('alto_tol'),
+        datos.get('ancho_ref'),
+        datos.get('ancho_tol'),
+        datos.get('largo_ref'),
+        datos.get('largo_tol'),
+        id_pieza
+    ))
+    conn.commit()
+    filas_afectadas = c.rowcount
+    conn.close()
+    return filas_afectadas > 0
+
 # ── OBTENER PIEZA POR NOMBRE ─────────────────────────
 def obtener_pieza_por_nombre(nombre):
     conn = sqlite3.connect(DB)
