@@ -6,16 +6,10 @@
 
 from machine import Pin
 from time import sleep_ms, sleep_us
+from pines import (PIN_STEP, PIN_DIR, PIN_ENABLE,
+                   PIN_FIN_CARRERA_ARRIBA, PIN_FIN_CARRERA_ABAJO)
 
-# ─── Pines (ajustar con el hardware real) ─────────────────────────────────────
-
-PIN_STEP                 = 14   # pulso de paso al driver
-PIN_DIR                  = 12   # dirección: HIGH = subir, LOW = bajar
-PIN_ENABLE               = 13   # habilitación del driver: LOW = activo, HIGH = apagado
-PIN_FIN_CARRERA_ARRIBA   = 32   # final de carrera límite superior
-PIN_FIN_CARRERA_ABAJO    = 33   # final de carrera límite inferior
-
-PASOS_POR_VUELTA = 200          # NEMA17 estándar: 1.8° por paso
+PASOS_POR_VUELTA = 200   # NEMA17 estándar: 1.8° por paso
 
 
 class Elevador:
