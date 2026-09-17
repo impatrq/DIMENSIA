@@ -19,7 +19,12 @@ function showPage(id, el) {
 // ── FORMULARIO NUEVA PIEZA ───────────────────────────────────
 function toggleForm() {
   const form = document.getElementById('form-card');
-  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  const abriendo = form.style.display === 'none';
+  form.style.display = abriendo ? 'block' : 'none';
+  if (!abriendo) {
+    document.getElementById('pieza-id-editando').value = '';
+    document.getElementById('form-card-titulo').textContent = 'Nueva pieza';
+  }
 }
 
 // ── FECHA Y HORA ─────────────────────────────────────────────
@@ -90,6 +95,27 @@ async function cargarInspecciones() {
   }
 }
 
+// ── ALERTA DE HARDWARE ────────────────────────────────────────
+async function cargarAlertaHardware() {
+  try {
+    const res = await fetch(`${API}/alerta_hardware`);
+    const data = await res.json();
+    const alerta = document.getElementById('alerta-hardware');
+    const alertaTexto = document.getElementById('alerta-hardware-texto');
+    if (!alerta || !alertaTexto) return;
+
+    if (data.activa) {
+      alertaTexto.innerHTML = `<strong>⚠ Alerta de hardware:</strong> ${data.mensaje}. Tipo: ${data.tipo}.`;
+      alerta.style.display = 'flex';
+    } else {
+      alertaTexto.innerHTML = '';
+      alerta.style.display = 'none';
+    }
+  } catch (err) {
+    console.log('No se pudo cargar la alerta de hardware');
+  }
+}
+
 // ── CARGAR REPORTES POR PIEZA ────────────────────────────────
 async function cargarReportes() {
   const tbody = document.getElementById('reportes-table-body');
@@ -146,14 +172,18 @@ async function cargarPiezas() {
     if (!tbody || data.length === 0) return;
 
     tbody.innerHTML = '';
+    const arg = (v) => JSON.stringify(v ?? null).replace(/'/g, '&#39;');
     data.forEach(pieza => {
       const fila = document.createElement('tr');
+      const onclick = `editarPieza(${arg(pieza.id)}, ${arg(pieza.nombre)}, ${arg(pieza.norma)}, `
+        + `${arg(pieza.alto_ref)}, ${arg(pieza.alto_tol)}, ${arg(pieza.ancho_ref)}, ${arg(pieza.ancho_tol)}, `
+        + `${arg(pieza.largo_ref)}, ${arg(pieza.largo_tol)})`;
       fila.innerHTML = `
         <td>${pieza.nombre}</td>
         <td class="mono">${pieza.norma || '—'}</td>
         <td class="mono">${pieza.alto_ref ? pieza.alto_ref + ' mm' : '—'}</td>
         <td class="mono">${pieza.ancho_ref ? pieza.ancho_ref + ' mm' : '—'}</td>
-        <td><span class="pill pend" style="cursor:pointer">editar</span></td>
+        <td><button class="pill pend" style="cursor:pointer;border:none;font:inherit" onclick='${onclick}'>editar</button></td>
       `;
       tbody.appendChild(fila);
     });
@@ -287,14 +317,17 @@ cargarSensores();
 cargarUltimaInspeccion();
 cargarHistorial();
 cargarServos();
+cargarAlertaHardware();
 setInterval(cargarInspecciones,    5000);
 setInterval(cargarSensores,        2000);
 setInterval(cargarUltimaInspeccion,3000);
 setInterval(cargarHistorial,      10000);
 setInterval(cargarServos,          2000);
+setInterval(cargarAlertaHardware,  5000);
 
 // ── GUARDAR PIEZA ──────────────────────────────────────
 async function guardarPieza() {
+  const idEditando = document.getElementById('pieza-id-editando').value;
   const datos = {
     nombre:    document.getElementById('pieza-nombre').value,
     norma:     document.getElementById('pieza-norma').value,
@@ -306,22 +339,46 @@ async function guardarPieza() {
     largo_tol: parseFloat(document.getElementById('pieza-largo-tol').value),
   };
 
-  const respuesta = await fetch(`${API}/piezas`, {
-    method: 'POST',
+  const url    = idEditando ? `${API}/piezas/${idEditando}` : `${API}/piezas`;
+  const metodo = idEditando ? 'PUT' : 'POST';
+
+  const respuesta = await fetch(url, {
+    method: metodo,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(datos)
   });
 
   if (respuesta.ok) {
-    const resultado = await respuesta.json();
-    generarQR(datos.nombre, datos.norma, resultado.id);
-    setTimeout(() => {
-      alert('✅ Pieza guardada correctamente');
+    if (idEditando) {
+      alert('✅ Pieza actualizada correctamente');
       toggleForm();
-    }, 500);
+      cargarPiezas();
+    } else {
+      const resultado = await respuesta.json();
+      generarQR(datos.nombre, datos.norma, resultado.id);
+      setTimeout(() => {
+        alert('✅ Pieza guardada correctamente');
+        toggleForm();
+      }, 500);
+    }
   } else {
     alert('❌ Error al guardar la pieza');
   }
+}
+
+// ── EDITAR PIEZA EXISTENTE ───────────────────────────────
+function editarPieza(id, nombre, norma, altoRef, altoTol, anchoRef, anchoTol, largoRef, largoTol) {
+  document.getElementById('pieza-nombre').value    = nombre ?? '';
+  document.getElementById('pieza-norma').value     = norma ?? '';
+  document.getElementById('pieza-alto-ref').value  = altoRef ?? '';
+  document.getElementById('pieza-alto-tol').value  = altoTol ?? '';
+  document.getElementById('pieza-ancho-ref').value = anchoRef ?? '';
+  document.getElementById('pieza-ancho-tol').value = anchoTol ?? '';
+  document.getElementById('pieza-largo-ref').value = largoRef ?? '';
+  document.getElementById('pieza-largo-tol').value = largoTol ?? '';
+  document.getElementById('pieza-id-editando').value = id;
+  document.getElementById('form-card-titulo').textContent = 'Editar pieza';
+  document.getElementById('form-card').style.display = 'block';
 }
 
 // ── GENERAR QR ──────────────────────────────────────────
