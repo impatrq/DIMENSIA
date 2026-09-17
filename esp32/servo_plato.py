@@ -8,11 +8,11 @@
 
 from machine import Pin, PWM
 from time import sleep_ms
+from pines import PIN_SERVO_PLATO
 
-# ─── Pines y frecuencia ───────────────────────────────────────────────────────
+# ─── Frecuencia PWM ───────────────────────────────────────────────────────────
 
-PIN_SERVO_PLATO = 15   # ajustar según el cableado real
-FRECUENCIA_PWM  = 50   # 50 Hz estándar para servos RC
+FRECUENCIA_PWM = 50   # 50 Hz estándar para servos RC
 
 # ─── Duty cycle de referencia ─────────────────────────────────────────────────
 # Los duty cycles se expresan en la escala de MicroPython: 0–1023.

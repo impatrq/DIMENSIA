@@ -6,11 +6,11 @@
 # MicroPython
 
 from machine import Pin, PWM
+from pines import PIN_SERVO_PALETA
 
-# ─── Pines y frecuencia ───────────────────────────────────────────────────────
+# ─── Frecuencia PWM ───────────────────────────────────────────────────────────
 
-PIN_SERVO_PALETA = 17   # ajustar según el cableado real
-FRECUENCIA_PWM   = 50   # 50 Hz estándar para servos RC
+FRECUENCIA_PWM = 50   # 50 Hz estándar para servos RC
 
 # ─── Ángulos de operación ─────────────────────────────────────────────────────
 

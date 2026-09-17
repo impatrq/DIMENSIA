@@ -13,10 +13,7 @@ from servo_plato import ServoPlato
 from servo_brazo import ServoBrazo
 from servo_paleta import ServoPaleta
 from comunicacion import Comunicacion
-
-# ─── Constantes ───────────────────────────────────────────────────────────────
-
-PIN_BOTON = 4   # botón de inicio de ciclo, activo en LOW (pull-up interno)
+from pines import PIN_BOTON
 
 # ─── Inicialización del hardware ──────────────────────────────────────────────
 
