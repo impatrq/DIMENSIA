@@ -3,7 +3,7 @@ import os
 import csv
 from flask import Flask, jsonify, request, Response, send_file, abort
 from flask_cors import CORS
-from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas, guardar_pieza, guardar_calibracion, obtener_calibracion, obtener_calibraciones, obtener_capturas, CARPETA_CAPTURAS, fecha_arg
+from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas, guardar_pieza, editar_pieza, guardar_calibracion, obtener_calibracion, obtener_calibraciones, obtener_capturas, CARPETA_CAPTURAS, fecha_arg
 
 app = Flask(__name__) 
 CORS(app)
@@ -41,6 +41,15 @@ def nueva_pieza():
     datos = request.get_json()
     id_pieza = guardar_pieza(datos)
     return jsonify({'estado': 'ok', 'mensaje': 'Pieza guardada', 'id': id_pieza})
+
+# Editar una pieza existente
+@app.route('/piezas/<int:id_pieza>', methods=['PUT'])
+def actualizar_pieza(id_pieza):
+    datos = request.get_json()
+    encontrada = editar_pieza(id_pieza, datos)
+    if not encontrada:
+        return jsonify({'estado': 'error', 'mensaje': 'Pieza no encontrada'}), 404
+    return jsonify({'estado': 'ok', 'mensaje': 'Pieza actualizada'})
 
 # Obtener tipos de piezas registradas
 @app.route('/piezas', methods=['GET'])
