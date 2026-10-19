@@ -22,10 +22,6 @@ from db import BaseDatos
 
 _URL_BACKEND = "http://localhost:5000"
 
-# Tiempo de giro que la Raspberry Pi le ordena a la ESP32 por cada ángulo.
-# Valor de ejemplo — calibrar con el hardware real usando servo_plato.calibrar_paso().
-TIEMPO_GIRO_MS = 500
-
 # Tiempo máximo para recibir la confirmación "giro_completado" de la ESP32.
 # Si se supera, el ciclo se aborta para no quedar esperando indefinidamente.
 TIMEOUT_CONFIRMACION_SEG = 15
@@ -121,8 +117,10 @@ def ejecutar_ciclo_inspeccion(pieza, camaras, procesador, receptor):
     for n_angulo in range(8):
         angulo_grados = n_angulo * 45
 
-        # Mandar comando de giro a la ESP32 por Serial
-        _enviar_serial(receptor, {"comando": "girar", "tiempo_ms": TIEMPO_GIRO_MS})
+        # Mandar comando de giro a la ESP32 por Serial.
+        # El tiempo de giro lo decide la ESP32 (TIEMPO_PASO_45_MS en servo_plato.py),
+        # no la Raspberry Pi — no se pasa tiempo_ms en el comando.
+        _enviar_serial(receptor, {"comando": "girar"})
 
         # Esperar la confirmación antes de capturar — el plato tiene que estar quieto.
         # El bucle está acotado en tiempo real porque cada leer_siguiente() puede

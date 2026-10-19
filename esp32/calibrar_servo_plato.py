@@ -5,7 +5,7 @@
 # (un octavo de vuelta), que es el paso entre cada captura del ciclo de inspección.
 # MicroPython
 
-from servo_plato import ServoPlato
+from servo_plato import ServoPlato, TIEMPO_PASO_45_MS
 
 
 def calibrar_interactivo():
@@ -23,7 +23,8 @@ def calibrar_interactivo():
     print("gire exactamente 45 grados (un octavo de vuelta).")
     print("")
 
-    tiempo_ms = 500  # punto de partida razonable para la mayoría de los servos
+    # Arrancar desde el valor medido más reciente, no desde 500ms genérico
+    tiempo_ms = TIEMPO_PASO_45_MS
 
     while True:
         print("Tiempo actual: {}ms".format(tiempo_ms))
@@ -46,8 +47,8 @@ def calibrar_interactivo():
 
         elif entrada == "ok":
             print("")
-            print("Valor calibrado: TIEMPO_GIRO_MS = {}".format(tiempo_ms))
-            print("Copia este valor a raspberry/main.py")
+            print("Valor calibrado: TIEMPO_PASO_45_MS = {}".format(tiempo_ms))
+            print("Copia este valor a TIEMPO_PASO_45_MS en esp32/servo_plato.py")
             break
 
         elif entrada == "q":
