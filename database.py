@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import math
 import base64
 from datetime import datetime, timezone, timedelta
 
@@ -89,15 +90,42 @@ def init_db():
     conn.commit()
     conn.close()
 
+# ── NORMALIZAR DIMENSION ─────────────────────────────
+# Devuelve la dimension como float, o None si llega None, vacia o no numerica
+def normalizar_dimension(valor):
+    if valor is None or isinstance(valor, bool):
+        return None
+    if isinstance(valor, str):
+        valor = valor.strip()
+        if not valor:
+            return None
+    try:
+        valor = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return valor if math.isfinite(valor) else None
+
+# ── GENERAR NUMERO DE SERIE ──────────────────────────
+# Formato DIM-AAAAMMDD-NNN; el contador sale de la base y se reinicia cada dia
+def generar_numero_serie(c, fecha):
+    prefijo = f"DIM-{fecha[:10].replace('-', '')}-"
+    c.execute(
+        'SELECT MAX(CAST(substr(numero_serie, ?) AS INTEGER)) FROM inspecciones WHERE numero_serie GLOB ?',
+        (len(prefijo) + 1, prefijo + '[0-9][0-9][0-9]*')
+    )
+    ultimo = c.fetchone()[0] or 0
+    return f'{prefijo}{ultimo + 1:03d}'
+
 # ── GUARDAR INSPECCION ───────────────────────────────
 def guardar_inspeccion(datos):
+    dimensiones = {dim: normalizar_dimension(datos.get(dim)) for dim in ('alto', 'ancho', 'largo')}
+
     motivo_rechazo = None
     if datos.get('resultado') == 'RECHAZADA':
         pieza = obtener_pieza_por_nombre(datos.get('pieza'))
         if pieza:
             fuera_tolerancia = []
-            for dim in ('alto', 'ancho', 'largo'):
-                valor = datos.get(dim)
+            for dim, valor in dimensiones.items():
                 ref = pieza.get(f'{dim}_ref')
                 tol = pieza.get(f'{dim}_tol')
                 if valor is not None and ref is not None and tol is not None:
@@ -105,20 +133,29 @@ def guardar_inspeccion(datos):
                         fuera_tolerancia.append(dim)
             motivo_rechazo = ', '.join(fuera_tolerancia) if fuera_tolerancia else None
 
+    fecha = fecha_arg()
+    numero_serie = datos.get('numero_serie')
+    if isinstance(numero_serie, str) and not numero_serie.strip():
+        numero_serie = None
+
     conn = sqlite3.connect(DB)
     c = conn.cursor()
+    # Bloquear escrituras hasta el commit para que dos inspecciones no tomen el mismo numero
+    c.execute('BEGIN IMMEDIATE')
+    if not numero_serie:
+        numero_serie = generar_numero_serie(c, fecha)
     c.execute('''
         INSERT INTO inspecciones
           (pieza, numero_serie, alto, ancho, largo, resultado, fecha, operario, legajo, lectura_s2p, lectura_s3p, motivo_rechazo)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         datos.get('pieza'),
-        datos.get('numero_serie'),
-        datos.get('alto'),
-        datos.get('ancho'),
-        datos.get('largo'),
+        numero_serie,
+        dimensiones['alto'],
+        dimensiones['ancho'],
+        dimensiones['largo'],
         datos.get('resultado'),
-        fecha_arg(),
+        fecha,
         datos.get('operario'),
         datos.get('legajo'),
         datos.get('lectura_s2p'),
@@ -130,6 +167,7 @@ def guardar_inspeccion(datos):
     conn.close()
 
     guardar_capturas(inspeccion_id, datos)
+    return {'id': inspeccion_id, 'numero_serie': numero_serie}
 
 # ── GUARDAR CAPTURAS DE CAMARA ───────────────────────
 def guardar_capturas(inspeccion_id, datos):
