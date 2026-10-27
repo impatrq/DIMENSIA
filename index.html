@@ -98,6 +98,11 @@
           <span id="alerta-racha-texto"></span>
         </div>
 
+        <div class="alert alert-warn" id="alerta-hardware" style="display:none">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2L14 13H2L8 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><line x1="8" y1="7" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="12" r="0.5" fill="currentColor" stroke="currentColor"/></svg>
+          <span id="alerta-hardware-texto"></span>
+        </div>
+
         <!-- Métricas principales -->
         <div class="metrics-grid">
           <div class="metric-card">
@@ -376,7 +381,8 @@
 
           <!-- FORMULARIO NUEVA PIEZA -->
           <div class="card" id="form-card" style="display:none">
-            <div class="card-title">Nueva pieza</div>
+            <div class="card-title" id="form-card-titulo">Nueva pieza</div>
+            <input type="hidden" id="pieza-id-editando" value="">
             <div class="form-group">
               <label>Nombre de la pieza</label>
               <input id="pieza-nombre" type="text" placeholder="Ej: Niple NPT 1/2&quot;">
