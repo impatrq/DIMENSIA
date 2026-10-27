@@ -41,6 +41,11 @@ setInterval(updateDate, 60000);
 // ── BACKEND URL ──────────────────────────────────────────────
 const API = 'http://localhost:5000';
 
+// ── FORMATO DE DIMENSIONES (pueden llegar null en mediciones parciales) ──
+function fmtDim(v, unidad = '') {
+  return v != null && v !== '' ? Number(v).toFixed(1) + unidad : '—' + unidad;
+}
+
 // ── CARGAR INSPECCIONES DESDE EL BACKEND ────────────────────
 async function cargarInspecciones() {
   try {
@@ -59,9 +64,9 @@ async function cargarInspecciones() {
       const fila = document.createElement('tr');
       fila.innerHTML = `
         <td>${insp.pieza}</td>
-        <td class="mono">${insp.alto ? insp.alto.toFixed(1) : '—'}</td>
-        <td class="mono">${insp.ancho ? insp.ancho.toFixed(1) : '—'}</td>
-        <td class="mono">${insp.largo ? insp.largo.toFixed(1) : '—'}</td>
+        <td class="mono">${fmtDim(insp.alto)}</td>
+        <td class="mono">${fmtDim(insp.ancho)}</td>
+        <td class="mono">${fmtDim(insp.largo)}</td>
         <td><span class="pill ${insp.resultado === 'APROBADA' ? 'ok' : 'fail'}">${insp.resultado}</span></td>
       `;
       tabla.appendChild(fila);
@@ -292,9 +297,9 @@ async function cargarUltimaInspeccion() {
     document.getElementById('insp-tipo').textContent     = insp.pieza    || '—';
     document.getElementById('insp-numero-serie').textContent = insp.numero_serie || '—';
     document.getElementById('insp-norma').textContent    = '—';
-    document.getElementById('insp-alto').textContent     = insp.alto     ? insp.alto.toFixed(1)  + ' mm' : '— mm';
-    document.getElementById('insp-ancho').textContent    = insp.ancho    ? insp.ancho.toFixed(1) + ' mm' : '— mm';
-    document.getElementById('insp-largo').textContent    = insp.largo    ? insp.largo.toFixed(1) + ' mm' : '— mm';
+    document.getElementById('insp-alto').textContent     = fmtDim(insp.alto,  ' mm');
+    document.getElementById('insp-ancho').textContent    = fmtDim(insp.ancho, ' mm');
+    document.getElementById('insp-largo').textContent    = fmtDim(insp.largo, ' mm');
     document.getElementById('insp-operario').textContent = insp.operario || '—';
 
     const aprobada = insp.resultado === 'APROBADA';
@@ -467,9 +472,9 @@ function renderHistorial(data) {
         <td class="mono gray">#${insp.id}</td>
         <td>${insp.pieza || '—'}</td>
         <td class="mono">${insp.numero_serie || '—'}</td>
-        <td class="mono">${insp.alto  ? insp.alto.toFixed(1)  : '—'}</td>
-        <td class="mono">${insp.ancho ? insp.ancho.toFixed(1) : '—'}</td>
-        <td class="mono">${insp.largo ? insp.largo.toFixed(1) : '—'}</td>
+        <td class="mono">${fmtDim(insp.alto)}</td>
+        <td class="mono">${fmtDim(insp.ancho)}</td>
+        <td class="mono">${fmtDim(insp.largo)}</td>
         <td><span class="pill ${insp.resultado === 'APROBADA' ? 'ok' : 'fail'}">${insp.resultado}</span></td>
         <td>${insp.resultado === 'APROBADA' || insp.motivo_rechazo == null ? '—' : insp.motivo_rechazo}</td>
         <td class="gray small">${fecha}</td>

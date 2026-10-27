@@ -22,12 +22,21 @@ def index():
 @app.route('/inspeccion', methods=['POST'])
 def nueva_inspeccion():
     datos = request.get_json()
+    # Mediciones parciales: una dimension vacia se guarda como NULL
+    for dim in ('alto', 'ancho', 'largo'):
+        if datos.get(dim) == '':
+            datos[dim] = None
     # Agregar operario activo automaticamente si no viene en los datos
     if not datos.get('operario'):
         datos['operario'] = operario_activo.get('operario')
         datos['legajo']   = operario_activo.get('legajo')
-    guardar_inspeccion(datos)
-    return jsonify({'estado': 'ok', 'mensaje': 'Inspeccion guardada'})
+    inspeccion = guardar_inspeccion(datos)
+    return jsonify({
+        'estado': 'ok',
+        'mensaje': 'Inspeccion guardada',
+        'id': inspeccion['id'],
+        'numero_serie': inspeccion['numero_serie']
+    })
 
 # Obtener todas las inspecciones para el dashboard
 @app.route('/inspecciones', methods=['GET'])
@@ -292,13 +301,13 @@ def exportar_csv():
     for i in inspecciones:
         writer.writerow([
             i.get('id', ''),
-            i.get('pieza', '—'),
-            i.get('numero_serie', '—'),
-            f"{i['alto']:.1f}" if i.get('alto') else '—',
-            f"{i['ancho']:.1f}" if i.get('ancho') else '—',
-            f"{i['largo']:.1f}" if i.get('largo') else '—',
+            i.get('pieza') or '—',
+            i.get('numero_serie') or '—',
+            f"{i['alto']:.1f}" if i.get('alto') is not None else '—',
+            f"{i['ancho']:.1f}" if i.get('ancho') is not None else '—',
+            f"{i['largo']:.1f}" if i.get('largo') is not None else '—',
             i.get('resultado', '—'),
-            i.get('operario', '—'),
+            i.get('operario') or '—',
             i.get('fecha', '—')
         ])
     return Response(
@@ -309,4 +318,4 @@ def exportar_csv():
 
 # ── ARRANCAR SERVIDOR ────────────────────────────────
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)
