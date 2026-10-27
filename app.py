@@ -30,8 +30,13 @@ def nueva_inspeccion():
     if not datos.get('operario'):
         datos['operario'] = operario_activo.get('operario')
         datos['legajo']   = operario_activo.get('legajo')
-    guardar_inspeccion(datos)
-    return jsonify({'estado': 'ok', 'mensaje': 'Inspeccion guardada'})
+    inspeccion = guardar_inspeccion(datos)
+    return jsonify({
+        'estado': 'ok',
+        'mensaje': 'Inspeccion guardada',
+        'id': inspeccion['id'],
+        'numero_serie': inspeccion['numero_serie']
+    })
 
 # Obtener todas las inspecciones para el dashboard
 @app.route('/inspecciones', methods=['GET'])
