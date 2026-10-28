@@ -7,6 +7,8 @@ import numpy as np
 import json
 import os
 
+from segmentacion import detectar_contorno_pieza
+
 RUTA_CALIBRACION_CAMARAS = os.path.join(os.path.dirname(__file__), "calibracion_camaras.json")
 CARPETA_CAPTURAS          = os.path.join(os.path.dirname(__file__), "capturas")
 
@@ -65,10 +67,13 @@ class ProcesadorImagenes:
         if imagen is None:
             raise Exception("No se pudo cargar la imagen: {}".format(ruta_imagen))
 
-        # Convertir a grises para poder umbralizar
+        # Convertir a grises y detectar el contorno con soporte para ambas polaridades
         grises = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
-        binaria = self._segmentar(grises)
-        contorno = self._contorno_principal(binaria)
+        try:
+            contorno, polaridad = detectar_contorno_pieza(grises)
+            print(polaridad)
+        except Exception:
+            contorno = None
 
         if contorno is None:
             return {"diametro_exterior_mm": None, "diametro_exterior_px": None}
@@ -97,10 +102,13 @@ class ProcesadorImagenes:
         if imagen is None:
             raise Exception("No se pudo cargar la imagen: {}".format(ruta_imagen))
 
-        # Convertir a grises y segmentar
+        # Convertir a grises y detectar el contorno con soporte para ambas polaridades
         grises = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
-        binaria = self._segmentar(grises)
-        contorno = self._contorno_principal(binaria)
+        try:
+            contorno, polaridad = detectar_contorno_pieza(grises)
+            print(polaridad)
+        except Exception:
+            contorno = None
 
         if contorno is None:
             return {"largo_mm": None, "largo_px": None, "alto_mm": None, "alto_px": None}
