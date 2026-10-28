@@ -1,21 +1,20 @@
 # Control del elevador — DIMENSIA
-# Motor paso a paso NEMA17 con driver A4988/DRV8825.
+# Motor paso a paso NEMA23 (Wantai 57BYGH633, 1,8° por paso) con driver TB6600.
+# Driver configurado en 1/16 de micropaso (3200 pulsos por vuelta), 2,0 A, 12 V.
 # El carro sube y baja por un husillo T8 guiado por 2 varillas laterales.
 # Dos finales de carrera limitan el recorrido: uno arriba y uno abajo.
 # MicroPython
 
 from machine import Pin
 from time import sleep_ms, sleep_us
+from pines import (PIN_STEP, PIN_DIR, PIN_ENABLE,
+                   PIN_FIN_CARRERA_ARRIBA, PIN_FIN_CARRERA_ABAJO,
+                   SENTIDO_SUBIR)
 
-# ─── Pines (ajustar con el hardware real) ─────────────────────────────────────
-
-PIN_STEP                 = 14   # pulso de paso al driver
-PIN_DIR                  = 12   # dirección: HIGH = subir, LOW = bajar
-PIN_ENABLE               = 13   # habilitación del driver: LOW = activo, HIGH = apagado
-PIN_FIN_CARRERA_ARRIBA   = 32   # final de carrera límite superior
-PIN_FIN_CARRERA_ABAJO    = 33   # final de carrera límite inferior
-
-PASOS_POR_VUELTA = 200          # NEMA17 estándar: 1.8° por paso
+# PASOS_POR_VUELTA no se usa en ningún cálculo actualmente.
+# Con el driver TB6600 en 1/16 serían 3200 pulsos por vuelta (200 pasos × 16).
+# Se deja como referencia para futuros cálculos de velocidad o distancia.
+PASOS_POR_VUELTA = 200   # pasos mecánicos del NEMA23; multiplicar × 16 para pulsos reales
 
 
 class Elevador:
@@ -23,6 +22,11 @@ class Elevador:
     Controla el motor paso a paso del elevador.
     El driver se mantiene deshabilitado (enable=HIGH) cuando no hay movimiento
     para reducir el calentamiento de la bobina.
+
+    NOTA sobre ENABLE: la lógica HIGH = deshabilitado / LOW = habilitado
+    corresponde al A4988. No se verificó para el TB6600 real. Con ENA sin
+    conectar (situación actual) el código de ENABLE no tiene efecto sobre
+    el driver, pero se mantiene para cuando se conecte.
     """
 
     def __init__(self):
@@ -56,8 +60,8 @@ class Elevador:
         El final de carrera activo se lee como LOW (pull-up + contacto a GND).
         Devuelve True si llegó arriba, False si hizo timeout sin llegar.
         """
-        self._enable.value(0)   # habilitar driver
-        self._dir.value(1)      # dirección: subir
+        self._enable.value(0)              # habilitar driver
+        self._dir.value(SENTIDO_SUBIR)     # dirección: subir
 
         pasos_max = (timeout_ms // 2)  # estimación conservadora de pasos en el tiempo límite
         for _ in range(pasos_max):
@@ -80,8 +84,8 @@ class Elevador:
         el final de carrera de abajo.
         Devuelve True si llegó abajo, False si hizo timeout sin llegar.
         """
-        self._enable.value(0)   # habilitar driver
-        self._dir.value(0)      # dirección: bajar
+        self._enable.value(0)              # habilitar driver
+        self._dir.value(1 - SENTIDO_SUBIR) # dirección: bajar (opuesto a subir)
 
         pasos_max = (timeout_ms // 2)
         for _ in range(pasos_max):

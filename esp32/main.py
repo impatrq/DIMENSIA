@@ -13,10 +13,7 @@ from servo_plato import ServoPlato
 from servo_brazo import ServoBrazo
 from servo_paleta import ServoPaleta
 from comunicacion import Comunicacion
-
-# ─── Constantes ───────────────────────────────────────────────────────────────
-
-PIN_BOTON = 4   # botón de inicio de ciclo, activo en LOW (pull-up interno)
+from pines import PIN_BOTON
 
 # ─── Inicialización del hardware ──────────────────────────────────────────────
 
@@ -71,14 +68,22 @@ def ciclo_inspeccion():
     print(json.dumps({"evento": "listo_para_medir"}))
 
     # ── Paso 3: loop de 8 giros comandados por la Raspberry Pi ───────────────
-    # La Raspi manda {"comando": "girar", "tiempo_ms": 500} una vez por captura.
-    # La ESP32 gira el plato y confirma; la Raspi decide cuándo terminar.
+    # La Raspi manda {"comando": "girar"} una vez por captura.
+    # El tiempo de giro está definido en TIEMPO_PASO_45_MS dentro de servo_plato.py:
+    # es la fuente única de verdad para ese parámetro, no raspberry/main.py.
+    # Si el comando trae "tiempo_ms", se ignora — la ESP32 decide el tiempo de giro.
+
+    # Pausa después del giro y antes de confirmar, para que el plato se asiente
+    # y las cámaras no capturen mientras aún hay vibración.
+    # PROVISIONAL: ajustar con la cámara real conectada.
+    PAUSA_ASENTAMIENTO_MS = 1000
+
     for _ in range(8):
         cmd = leer_comando()
 
         if cmd.get("comando") == "girar":
-            tiempo_ms = cmd.get("tiempo_ms", 500)
-            plato.girar_tiempo("horario", tiempo_ms)
+            plato.girar_paso("horario")
+            sleep_ms(PAUSA_ASENTAMIENTO_MS)
             print(json.dumps({"evento": "giro_completado"}))
         else:
             # Comando inesperado — ignorar y seguir esperando

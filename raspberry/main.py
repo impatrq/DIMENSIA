@@ -12,6 +12,8 @@ import base64
 import cv2
 import requests
 
+import config  # la URL del backend viene de raspberry/config.py (IP de la notebook que corre el backend)
+
 from receptor_serial import ReceptorSerial
 from camaras import GestorCamaras
 from procesamiento import ProcesadorImagenes
@@ -20,11 +22,7 @@ from procesamiento import ProcesadorImagenes
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "database"))
 from db import BaseDatos
 
-_URL_BACKEND = "http://localhost:5000"
-
-# Tiempo de giro que la Raspberry Pi le ordena a la ESP32 por cada ángulo.
-# Valor de ejemplo — calibrar con el hardware real usando servo_plato.calibrar_paso().
-TIEMPO_GIRO_MS = 500
+_URL_BACKEND = config.URL_BACKEND
 
 # Tiempo máximo para recibir la confirmación "giro_completado" de la ESP32.
 # Si se supera, el ciclo se aborta para no quedar esperando indefinidamente.
@@ -121,8 +119,10 @@ def ejecutar_ciclo_inspeccion(pieza, camaras, procesador, receptor):
     for n_angulo in range(8):
         angulo_grados = n_angulo * 45
 
-        # Mandar comando de giro a la ESP32 por Serial
-        _enviar_serial(receptor, {"comando": "girar", "tiempo_ms": TIEMPO_GIRO_MS})
+        # Mandar comando de giro a la ESP32 por Serial.
+        # El tiempo de giro lo decide la ESP32 (TIEMPO_PASO_45_MS en servo_plato.py),
+        # no la Raspberry Pi — no se pasa tiempo_ms en el comando.
+        _enviar_serial(receptor, {"comando": "girar"})
 
         # Esperar la confirmación antes de capturar — el plato tiene que estar quieto.
         # El bucle está acotado en tiempo real porque cada leer_siguiente() puede
@@ -226,7 +226,8 @@ def ejecutar_ciclo_inspeccion(pieza, camaras, procesador, receptor):
 
 def main():
     db         = BaseDatos()
-    receptor   = ReceptorSerial()
+    # por defecto /dev/ttyUSB0 (Raspberry Pi); en Windows se define PUERTO_SERIE = "COM5" en el config.py local
+    receptor   = ReceptorSerial(puerto=getattr(config, "PUERTO_SERIE", "/dev/ttyUSB0"))
     camaras    = GestorCamaras()
     procesador = ProcesadorImagenes()
 
