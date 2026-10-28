@@ -12,6 +12,9 @@ import argparse
 import cv2
 import json
 import os
+import sys
+
+from segmentacion import detectar_contorno_pieza
 
 RUTA_CALIBRACION   = os.path.join(os.path.dirname(__file__), "calibracion_camaras.json")
 CARPETA_CAPTURAS   = os.path.join(os.path.dirname(__file__), "capturas")
@@ -40,31 +43,13 @@ def medir_referencia_en_imagen(ruta_imagen):
             "la iluminación y que el objeto esté dentro del cuadro."
         )
 
-    # Otsu determina automáticamente el umbral óptimo según el histograma
-    _, binaria = cv2.threshold(grises, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Detectar el contorno de la pieza con soporte para las dos polaridades
+    # (objeto oscuro sobre fondo claro y objeto claro sobre fondo oscuro)
+    contorno_principal, polaridad = detectar_contorno_pieza(grises)
+    print(polaridad)
 
-    # Encontrar todos los contornos externos
-    contornos, _ = cv2.findContours(binaria, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contornos:
-        raise Exception("No se detectó ningún objeto en la imagen.")
-
-    # Filtrar contornos que cubran más del 90% de la imagen: casi siempre son el
-    # borde completo que Otsu detecta cuando la iluminación es pareja o hay sombras.
+    # area_imagen lo necesitan las validaciones de tamaño más abajo
     area_imagen = imagen.shape[0] * imagen.shape[1]
-    contornos_validos = [
-        c for c in contornos if cv2.contourArea(c) < area_imagen * 0.90
-    ]
-
-    if not contornos_validos:
-        raise Exception(
-            "Solo se detectó el borde de la imagen, no un objeto "
-            "real. Puede ser un problema de iluminación o sombras "
-            "alrededor de la pieza — probá con un fondo más "
-            "uniforme o mejor contraste."
-        )
-
-    # Tomar el contorno más grande de la lista ya filtrada
-    contorno_principal = max(contornos_validos, key=cv2.contourArea)
 
     # Obtener el rectángulo que encierra el contorno
     # x, y = esquina superior izquierda; ancho y alto en píxeles
@@ -166,7 +151,8 @@ def _capturar_y_medir(indice_camara, ruta_guardado):
             print("[ERROR] {}".format(e))
             respuesta = input("¿Querés reintentar? (s/n): ").strip().lower()
             if respuesta != "s":
-                raise  # Relanzar la excepción original para cortar el proceso
+                print("Calibración cancelada.")
+                sys.exit(1)
             continue
 
         # Pedir confirmación visual antes de aceptar el resultado.
