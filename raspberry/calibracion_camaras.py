@@ -21,11 +21,12 @@ CARPETA_CAPTURAS   = os.path.join(os.path.dirname(__file__), "capturas")
 VALOR_DEFAULT_CALIB = 10.0   # valor puesto cuando la otra cámara aún no fue calibrada
 
 
-def medir_referencia_en_imagen(ruta_imagen):
+def medir_referencia_en_imagen(ruta_imagen, camara):
     """
     Detecta el objeto de referencia en la imagen y devuelve su tamaño en píxeles.
-    Usa el mismo pipeline de segmentación que procesamiento.py:
-    escala de grises → umbral de Otsu → contorno más grande → bounding rect.
+    Usa el mismo pipeline que procesamiento.py y la misma medida por cámara:
+      superior → diámetro del círculo mínimo (igual que procesar_superior)
+      lateral  → ancho del rectángulo         (igual que procesar_lateral)
     """
     imagen = cv2.imread(ruta_imagen)
     if imagen is None:
@@ -51,8 +52,7 @@ def medir_referencia_en_imagen(ruta_imagen):
     # area_imagen lo necesitan las validaciones de tamaño más abajo
     area_imagen = imagen.shape[0] * imagen.shape[1]
 
-    # Obtener el rectángulo que encierra el contorno
-    # x, y = esquina superior izquierda; ancho y alto en píxeles
+    # El rectángulo envolvente se usa siempre: para la imagen de control y el límite 60 %.
     x, y, ancho_px, alto_px = cv2.boundingRect(contorno_principal)
 
     # Validar que el bounding rect tenga dimensiones válidas
@@ -72,6 +72,18 @@ def medir_referencia_en_imagen(ruta_imagen):
             "cerca de la cámara."
         )
 
+    # Calcular la medida en píxeles que se usa para px_por_mm según la cámara,
+    # para que coincida exactamente con lo que hace procesamiento.py en cada caso.
+    if camara == "superior":
+        # procesar_superior() usa el diámetro del círculo mínimo, no el rectángulo
+        _, radio_px = cv2.minEnclosingCircle(contorno_principal)
+        medida_px   = round(radio_px * 2)
+        desc_medida = "diámetro del círculo mínimo"
+    else:  # lateral
+        # procesar_lateral() usa el ancho del rectángulo envolvente
+        medida_px   = ancho_px
+        desc_medida = "ancho del rectángulo"
+
     # Guardar imagen de control con el rectángulo detectado dibujado en rojo.
     # El nombre es el mismo que la imagen original con "_deteccion" agregado antes de la extensión.
     base, ext = os.path.splitext(ruta_imagen)
@@ -80,14 +92,14 @@ def medir_referencia_en_imagen(ruta_imagen):
     cv2.rectangle(imagen_control, (x, y), (x + ancho_px, y + alto_px), (0, 0, 255), 3)
     cv2.imwrite(ruta_deteccion, imagen_control)
 
-    # Informar el tamaño detectado como porcentaje del ancho de la imagen
+    # Informar el tamaño detectado y qué medida se usó para la calibración
     ancho_imagen = imagen.shape[1]
     alto_imagen  = imagen.shape[0]
-    porcentaje_ancho = round(ancho_px * 100 / ancho_imagen)
-    print("Objeto detectado: {} px ({} % del ancho de la imagen)".format(
-        ancho_px, porcentaje_ancho))
+    porcentaje_ancho = round(medida_px * 100 / ancho_imagen)
+    print("Objeto detectado: {} px ({} % del ancho de la imagen) — {}".format(
+        medida_px, porcentaje_ancho, desc_medida))
 
-    # Si el objeto ocupa más del 60 % del ancho o del alto es probable que
+    # Si el rectángulo ocupa más del 60 % del ancho o del alto es probable que
     # Otsu haya detectado el fondo u otro elemento grande en lugar del objeto de referencia.
     if ancho_px > ancho_imagen * 0.60 or alto_px > alto_imagen * 0.60:
         raise Exception(
@@ -96,7 +108,7 @@ def medir_referencia_en_imagen(ruta_imagen):
             "sin manos ni otros objetos en el cuadro."
         )
 
-    return ancho_px, alto_px, ruta_deteccion
+    return medida_px, alto_px, ruta_deteccion
 
 
 def _capturar_con_camara(indice, ruta_guardado):
@@ -120,7 +132,20 @@ def _capturar_con_camara(indice, ruta_guardado):
     print("  Índice de cámara: {}  |  Resolución real: {}×{}".format(
         indice, ancho_real, alto_real))
 
+    # Descartar 30 cuadros para dar tiempo al autofocus y a la exposición automática.
+    # Sin este calentamiento la imagen puede salir borrosa o sobreexpuesta.
+    # 30 cuadros ≈ 2 segundos a 15 fps (el tiempo real depende del fps de la cámara).
+    print("Ajustando enfoque...")
+    for _ in range(30):
+        cam.read()
+
     input("Presioná ENTER para capturar...")
+
+    # Descartar 10 cuadros más tras el ENTER para asegurarse de no capturar
+    # un cuadro viejo del buffer ni uno tomado mientras el enfoque se reajusta
+    # por el movimiento del objeto o el cambio de escena al preparar la toma.
+    for _ in range(10):
+        cam.read()
 
     ret, frame = cam.read()
     cam.release()
@@ -131,22 +156,33 @@ def _capturar_con_camara(indice, ruta_guardado):
     cv2.imwrite(ruta_guardado, frame)
     print("Imagen guardada en: {}".format(ruta_guardado))
 
+    # Calcular la nitidez de la imagen como la varianza del Laplaciano.
+    # Un valor alto indica bordes definidos (imagen nítida); uno bajo indica desenfoque.
+    # El umbral de 100 es orientativo y puede ajustarse con pruebas reales.
+    gris_captura = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    nitidez = cv2.Laplacian(gris_captura, cv2.CV_64F).var()
+    print("Nitidez: {:.1f} (orientativo)".format(nitidez))
+    if nitidez < 100:
+        print("[AVISO] La imagen puede estar desenfocada. "
+              "Alejá la cámara del objeto o esperá a que enfoque.")
+
     return ruta_guardado
 
 
-def _capturar_y_medir(indice_camara, ruta_guardado):
+def _capturar_y_medir(indice_camara, ruta_guardado, camara):
     """
     Captura una imagen con la cámara indicada y mide el objeto de referencia.
+    camara: "superior" o "lateral" — determina qué medida se usa para px_por_mm.
     Después de detectar, muestra la ruta de la imagen de control y pide confirmación
     visual antes de aceptar el resultado.
     Si la medición falla o el operario rechaza la detección, ofrece reintentar.
-    Devuelve (ancho_px, alto_px) del objeto detectado.
+    Devuelve (medida_px, alto_px) del objeto detectado.
     """
     while True:
         # Capturar y medir; si algo falla, ofrecer reintentar
         try:
             _capturar_con_camara(indice_camara, ruta_guardado)
-            ancho_px, alto_px, ruta_deteccion = medir_referencia_en_imagen(ruta_guardado)
+            medida_px, alto_px, ruta_deteccion = medir_referencia_en_imagen(ruta_guardado, camara)
         except Exception as e:
             print("[ERROR] {}".format(e))
             respuesta = input("¿Querés reintentar? (s/n): ").strip().lower()
@@ -166,7 +202,7 @@ def _capturar_y_medir(indice_camara, ruta_guardado):
             # El operario indica que la detección es incorrecta: volver a capturar
             continue
 
-        return ancho_px, alto_px
+        return medida_px, alto_px
 
 
 def _pedir_mm_referencia(mm_cli):
@@ -304,9 +340,8 @@ def calibrar():
         print("\n--- Cámara SUPERIOR (índice {}) ---".format(indice))
         print("Colocá el objeto de referencia bajo la cámara SUPERIOR")
         ruta = os.path.join(CARPETA_CAPTURAS, "calibracion_superior.jpg")
-        ancho_px, _ = _capturar_y_medir(indice, ruta)
-        px_por_mm = round(ancho_px / mm_referencia, 4)
-        print("  Objeto detectado: {} px".format(ancho_px))
+        medida_px, _ = _capturar_y_medir(indice, ruta, "superior")
+        px_por_mm = round(medida_px / mm_referencia, 4)
         print("  px_por_mm_superior = {} px/mm".format(px_por_mm))
         _guardar_clave("px_por_mm_superior", px_por_mm)
         print("\nCalibración guardada en calibracion_camaras.json.")
@@ -316,9 +351,8 @@ def calibrar():
         print("\n--- Cámara LATERAL (índice {}) ---".format(indice))
         print("Ahora colocá el objeto bajo la cámara LATERAL")
         ruta = os.path.join(CARPETA_CAPTURAS, "calibracion_lateral.jpg")
-        ancho_px, _ = _capturar_y_medir(indice, ruta)
-        px_por_mm = round(ancho_px / mm_referencia, 4)
-        print("  Objeto detectado: {} px".format(ancho_px))
+        medida_px, _ = _capturar_y_medir(indice, ruta, "lateral")
+        px_por_mm = round(medida_px / mm_referencia, 4)
         print("  px_por_mm_lateral = {} px/mm".format(px_por_mm))
         _guardar_clave("px_por_mm_lateral", px_por_mm)
         print("\nCalibración guardada en calibracion_camaras.json.")
@@ -328,18 +362,16 @@ def calibrar():
         print("\n--- Cámara SUPERIOR ---")
         print("Colocá el objeto de referencia bajo la cámara SUPERIOR")
         ruta_superior = os.path.join(CARPETA_CAPTURAS, "calibracion_superior.jpg")
-        ancho_px_sup, _ = _capturar_y_medir(0, ruta_superior)
-        px_por_mm_superior = round(ancho_px_sup / mm_referencia, 4)
-        print("  Objeto detectado: {} px".format(ancho_px_sup))
+        medida_px_sup, _ = _capturar_y_medir(0, ruta_superior, "superior")
+        px_por_mm_superior = round(medida_px_sup / mm_referencia, 4)
         print("  px_por_mm_superior = {} px/mm".format(px_por_mm_superior))
 
         # ─── Cámara lateral ───────────────────────────────────────────────────
         print("\n--- Cámara LATERAL ---")
         print("Ahora colocá el objeto bajo la cámara LATERAL")
         ruta_lateral = os.path.join(CARPETA_CAPTURAS, "calibracion_lateral.jpg")
-        ancho_px_lat, _ = _capturar_y_medir(1, ruta_lateral)
-        px_por_mm_lateral = round(ancho_px_lat / mm_referencia, 4)
-        print("  Objeto detectado: {} px".format(ancho_px_lat))
+        medida_px_lat, _ = _capturar_y_medir(1, ruta_lateral, "lateral")
+        px_por_mm_lateral = round(medida_px_lat / mm_referencia, 4)
         print("  px_por_mm_lateral = {} px/mm".format(px_por_mm_lateral))
 
         # ─── Guardar resultado ────────────────────────────────────────────────
