@@ -1,14 +1,21 @@
 # Calibración de cámaras — DIMENSIA
 # Calcula cuántos píxeles equivalen a 1 mm en cada cámara.
 # Se corre UNA SOLA VEZ con un objeto de referencia de medidas conocidas.
+# Uso:
+#   python calibracion_camaras.py                        → calibrar ambas cámaras
+#   python calibracion_camaras.py --camara superior      → solo la superior (índice 0)
+#   python calibracion_camaras.py --camara lateral       → solo la lateral  (índice 1)
+#   python calibracion_camaras.py --camara superior --indice 2 --mm 50
 # Requiere: pip install opencv-python
 
+import argparse
 import cv2
 import json
 import os
 
-RUTA_CALIBRACION = os.path.join(os.path.dirname(__file__), "calibracion_camaras.json")
-CARPETA_CAPTURAS = os.path.join(os.path.dirname(__file__), "capturas")
+RUTA_CALIBRACION   = os.path.join(os.path.dirname(__file__), "calibracion_camaras.json")
+CARPETA_CAPTURAS   = os.path.join(os.path.dirname(__file__), "capturas")
+VALOR_DEFAULT_CALIB = 10.0   # valor puesto cuando la otra cámara aún no fue calibrada
 
 
 def medir_referencia_en_imagen(ruta_imagen):
@@ -43,7 +50,7 @@ def medir_referencia_en_imagen(ruta_imagen):
 
     # Filtrar contornos que cubran más del 90% de la imagen: casi siempre son el
     # borde completo que Otsu detecta cuando la iluminación es pareja o hay sombras.
-    area_imagen  = imagen.shape[0] * imagen.shape[1]
+    area_imagen = imagen.shape[0] * imagen.shape[1]
     contornos_validos = [
         c for c in contornos if cv2.contourArea(c) < area_imagen * 0.90
     ]
@@ -73,7 +80,6 @@ def medir_referencia_en_imagen(ruta_imagen):
     # Validar que el objeto ocupe al menos el 1% de la imagen.
     # Un objeto más pequeño probablemente es ruido, no el objeto de referencia.
     area_objeto = ancho_px * alto_px
-    area_imagen = imagen.shape[0] * imagen.shape[1]
     if area_objeto < area_imagen * 0.01:
         raise Exception(
             "El objeto detectado es demasiado pequeño. Verificá "
@@ -81,11 +87,36 @@ def medir_referencia_en_imagen(ruta_imagen):
             "cerca de la cámara."
         )
 
-    return ancho_px, alto_px
+    # Guardar imagen de control con el rectángulo detectado dibujado en rojo.
+    # El nombre es el mismo que la imagen original con "_deteccion" agregado antes de la extensión.
+    base, ext = os.path.splitext(ruta_imagen)
+    ruta_deteccion = base + "_deteccion" + ext
+    imagen_control = imagen.copy()
+    cv2.rectangle(imagen_control, (x, y), (x + ancho_px, y + alto_px), (0, 0, 255), 3)
+    cv2.imwrite(ruta_deteccion, imagen_control)
+
+    # Informar el tamaño detectado como porcentaje del ancho de la imagen
+    ancho_imagen = imagen.shape[1]
+    alto_imagen  = imagen.shape[0]
+    porcentaje_ancho = round(ancho_px * 100 / ancho_imagen)
+    print("Objeto detectado: {} px ({} % del ancho de la imagen)".format(
+        ancho_px, porcentaje_ancho))
+
+    # Si el objeto ocupa más del 60 % del ancho o del alto es probable que
+    # Otsu haya detectado el fondo u otro elemento grande en lugar del objeto de referencia.
+    if ancho_px > ancho_imagen * 0.60 or alto_px > alto_imagen * 0.60:
+        raise Exception(
+            "El objeto detectado ocupa demasiado de la imagen: probablemente "
+            "se está midiendo el fondo. Usá un fondo liso y que contraste, "
+            "sin manos ni otros objetos en el cuadro."
+        )
+
+    return ancho_px, alto_px, ruta_deteccion
 
 
 def _capturar_con_camara(indice, ruta_guardado):
-    """Abre la cámara, espera confirmación del usuario, captura y guarda la imagen."""
+    """Abre la cámara, muestra el índice y la resolución real, espera confirmación del usuario,
+    captura y guarda la imagen."""
     cam = cv2.VideoCapture(indice)
     if not cam.isOpened():
         raise Exception(
@@ -93,9 +124,16 @@ def _capturar_con_camara(indice, ruta_guardado):
             "¿Está conectada?".format(indice)
         )
 
-    # Configurar resolución máxima de la Logitech C920e
+    # Solicitar resolución máxima de la Logitech C920e
     cam.set(cv2.CAP_PROP_FRAME_WIDTH,  1920)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+
+    # Imprimir el índice y la resolución REAL que aceptó la cámara antes de capturar,
+    # porque algunas cámaras no aceptan 1920×1080 y devuelven otra resolución.
+    ancho_real = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
+    alto_real  = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    print("  Índice de cámara: {}  |  Resolución real: {}×{}".format(
+        indice, ancho_real, alto_real))
 
     input("Presioná ENTER para capturar...")
 
@@ -114,79 +152,216 @@ def _capturar_con_camara(indice, ruta_guardado):
 def _capturar_y_medir(indice_camara, ruta_guardado):
     """
     Captura una imagen con la cámara indicada y mide el objeto de referencia.
-    Si la medición falla, ofrece al usuario reintentar antes de abortar.
+    Después de detectar, muestra la ruta de la imagen de control y pide confirmación
+    visual antes de aceptar el resultado.
+    Si la medición falla o el operario rechaza la detección, ofrece reintentar.
     Devuelve (ancho_px, alto_px) del objeto detectado.
     """
     while True:
+        # Capturar y medir; si algo falla, ofrecer reintentar
         try:
             _capturar_con_camara(indice_camara, ruta_guardado)
-            return medir_referencia_en_imagen(ruta_guardado)
+            ancho_px, alto_px, ruta_deteccion = medir_referencia_en_imagen(ruta_guardado)
         except Exception as e:
             print("[ERROR] {}".format(e))
             respuesta = input("¿Querés reintentar? (s/n): ").strip().lower()
             if respuesta != "s":
                 raise  # Relanzar la excepción original para cortar el proceso
+            continue
+
+        # Pedir confirmación visual antes de aceptar el resultado.
+        # La imagen de control tiene el rectángulo dibujado para que el operario
+        # pueda verificar que rodea solo el objeto de referencia y no el fondo.
+        print("  Imagen de control guardada en: {}".format(ruta_deteccion))
+        confirmacion = input(
+            "Revisá la imagen de control. ¿El rectángulo rodea solo el objeto? (s/n): "
+        ).strip().lower()
+        if confirmacion != "s":
+            # El operario indica que la detección es incorrecta: volver a capturar
+            continue
+
+        return ancho_px, alto_px
+
+
+def _pedir_mm_referencia(mm_cli):
+    """
+    Si mm_cli ya viene como float del argumento --mm, validarlo y devolverlo.
+    Si no, pedirlo interactivamente con la misma validación de siempre.
+    """
+    if mm_cli is not None:
+        if mm_cli <= 0:
+            raise ValueError("El valor de --mm tiene que ser mayor a 0.")
+        return mm_cli
+
+    # Pedir interactivamente con validación de número mayor a cero
+    while True:
+        texto = input("¿Cuántos mm mide el objeto de referencia? (ej: 50): ")
+        try:
+            mm = float(texto)
+        except ValueError:
+            print("[ERROR] Ingresá un número válido.")
+            continue
+        if mm <= 0:
+            print("[ERROR] El valor tiene que ser mayor a 0.")
+            continue
+        return mm
+
+
+def _leer_calibracion_existente():
+    """
+    Intenta leer el archivo de calibración existente.
+    Devuelve (dict, None) si se leyó bien o si no existe,
+    o (None, mensaje_error) si existe pero no es un JSON válido.
+    """
+    if not os.path.exists(RUTA_CALIBRACION):
+        return {}, None
+    try:
+        with open(RUTA_CALIBRACION, "r") as f:
+            return json.load(f), None
+    except (json.JSONDecodeError, ValueError) as e:
+        return None, str(e)
+
+
+def _guardar_clave(clave, valor):
+    """
+    Actualiza una sola clave en calibracion_camaras.json conservando la otra.
+    - Si el archivo no existe: crea ambas claves; la otra queda en VALOR_DEFAULT_CALIB con aviso.
+    - Si el archivo existe pero no es JSON válido: imprime el error y pide confirmación antes
+      de sobreescribir.
+    - Si el archivo existe y es válido: actualiza solo la clave indicada.
+    """
+    datos, error = _leer_calibracion_existente()
+
+    if datos is None:
+        # Archivo corrupto: pedir confirmación antes de sobreescribir
+        print("[ERROR] El archivo calibracion_camaras.json existe pero no es JSON válido: {}".format(error))
+        respuesta = input("¿Sobreescribir de todos modos? (s/n): ").strip().lower()
+        if respuesta != "s":
+            print("Guardado cancelado.")
+            return
+        datos = {}
+
+    otra_clave = (
+        "px_por_mm_lateral"   if clave == "px_por_mm_superior"
+        else "px_por_mm_superior"
+    )
+
+    datos[clave] = valor
+
+    # Si la clave opuesta falta, ponerla en el valor por defecto y avisar
+    if otra_clave not in datos:
+        datos[otra_clave] = VALOR_DEFAULT_CALIB
+        print("[AVISO] {} sigue en el valor por defecto {}: falta calibrarla".format(
+            otra_clave, VALOR_DEFAULT_CALIB))
+
+    with open(RUTA_CALIBRACION, "w") as f:
+        json.dump(datos, f, indent=2)
+
+
+def _guardar_ambas(px_por_mm_superior, px_por_mm_lateral):
+    """
+    Guarda las dos claves a la vez (modo --camara ambas).
+    Si el archivo existe pero no es JSON válido, pide confirmación antes de sobreescribir.
+    """
+    _, error = _leer_calibracion_existente()
+    if error is not None:
+        print("[ERROR] El archivo calibracion_camaras.json existe pero no es JSON válido: {}".format(error))
+        respuesta = input("¿Sobreescribir de todos modos? (s/n): ").strip().lower()
+        if respuesta != "s":
+            print("Guardado cancelado.")
+            return
+
+    calibracion = {
+        "px_por_mm_superior": px_por_mm_superior,
+        "px_por_mm_lateral":  px_por_mm_lateral,
+    }
+    with open(RUTA_CALIBRACION, "w") as f:
+        json.dump(calibracion, f, indent=2)
 
 
 def calibrar():
     """
-    Guía al operario a calibrar las dos cámaras con un objeto de referencia.
-    Calcula los píxeles por mm de cada cámara y guarda el resultado en JSON.
+    Punto de entrada principal. Parsea argumentos y delega en el flujo
+    correspondiente según --camara.
     """
+    parser = argparse.ArgumentParser(description="Calibración de cámaras — DIMENSIA")
+    parser.add_argument(
+        "--camara",
+        choices=["superior", "lateral", "ambas"],
+        default="ambas",
+        help="Qué cámara calibrar (default: ambas)",
+    )
+    parser.add_argument(
+        "--indice",
+        type=int,
+        default=None,
+        help="Índice OpenCV de la cámara. Solo se usa con --camara superior o lateral.",
+    )
+    parser.add_argument(
+        "--mm",
+        type=float,
+        default=None,
+        help="Tamaño real del objeto de referencia en mm (opcional; si no se pasa, se pregunta).",
+    )
+    args = parser.parse_args()
+
     os.makedirs(CARPETA_CAPTURAS, exist_ok=True)
 
     print("=" * 55)
     print("  CALIBRACIÓN DE CÁMARAS — DIMENSIA")
     print("=" * 55)
 
-    # Pedir el tamaño real del objeto de referencia con validación de entrada
-    while True:
-        texto = input("¿Cuántos mm mide el objeto de referencia? (ej: 50): ")
-        try:
-            mm_referencia = float(texto)
-        except ValueError:
-            print("[ERROR] Ingresá un número válido.")
-            continue
-        if mm_referencia <= 0:
-            print("[ERROR] El valor tiene que ser mayor a 0.")
-            continue
-        break
+    mm_referencia = _pedir_mm_referencia(args.mm)
 
-    # ─── Cámara superior ──────────────────────────────────────────────────────
-    print("\n--- Cámara SUPERIOR ---")
-    print("Colocá el objeto de referencia bajo la cámara SUPERIOR")
+    if args.camara == "superior":
+        indice = args.indice if args.indice is not None else 0
+        print("\n--- Cámara SUPERIOR (índice {}) ---".format(indice))
+        print("Colocá el objeto de referencia bajo la cámara SUPERIOR")
+        ruta = os.path.join(CARPETA_CAPTURAS, "calibracion_superior.jpg")
+        ancho_px, _ = _capturar_y_medir(indice, ruta)
+        px_por_mm = round(ancho_px / mm_referencia, 4)
+        print("  Objeto detectado: {} px".format(ancho_px))
+        print("  px_por_mm_superior = {} px/mm".format(px_por_mm))
+        _guardar_clave("px_por_mm_superior", px_por_mm)
+        print("\nCalibración guardada en calibracion_camaras.json.")
 
-    ruta_superior = os.path.join(CARPETA_CAPTURAS, "calibracion_superior.jpg")
-    ancho_px_sup, _ = _capturar_y_medir(0, ruta_superior)
-    px_por_mm_superior = round(ancho_px_sup / mm_referencia, 4)
+    elif args.camara == "lateral":
+        indice = args.indice if args.indice is not None else 1
+        print("\n--- Cámara LATERAL (índice {}) ---".format(indice))
+        print("Ahora colocá el objeto bajo la cámara LATERAL")
+        ruta = os.path.join(CARPETA_CAPTURAS, "calibracion_lateral.jpg")
+        ancho_px, _ = _capturar_y_medir(indice, ruta)
+        px_por_mm = round(ancho_px / mm_referencia, 4)
+        print("  Objeto detectado: {} px".format(ancho_px))
+        print("  px_por_mm_lateral = {} px/mm".format(px_por_mm))
+        _guardar_clave("px_por_mm_lateral", px_por_mm)
+        print("\nCalibración guardada en calibracion_camaras.json.")
 
-    print("  Objeto detectado: {} px".format(ancho_px_sup))
-    print("  px_por_mm_superior = {} px/mm".format(px_por_mm_superior))
+    else:  # ambas — comportamiento igual al original
+        # ─── Cámara superior ──────────────────────────────────────────────────
+        print("\n--- Cámara SUPERIOR ---")
+        print("Colocá el objeto de referencia bajo la cámara SUPERIOR")
+        ruta_superior = os.path.join(CARPETA_CAPTURAS, "calibracion_superior.jpg")
+        ancho_px_sup, _ = _capturar_y_medir(0, ruta_superior)
+        px_por_mm_superior = round(ancho_px_sup / mm_referencia, 4)
+        print("  Objeto detectado: {} px".format(ancho_px_sup))
+        print("  px_por_mm_superior = {} px/mm".format(px_por_mm_superior))
 
-    # ─── Cámara lateral ───────────────────────────────────────────────────────
-    print("\n--- Cámara LATERAL ---")
-    print("Ahora colocá el objeto bajo la cámara LATERAL")
+        # ─── Cámara lateral ───────────────────────────────────────────────────
+        print("\n--- Cámara LATERAL ---")
+        print("Ahora colocá el objeto bajo la cámara LATERAL")
+        ruta_lateral = os.path.join(CARPETA_CAPTURAS, "calibracion_lateral.jpg")
+        ancho_px_lat, _ = _capturar_y_medir(1, ruta_lateral)
+        px_por_mm_lateral = round(ancho_px_lat / mm_referencia, 4)
+        print("  Objeto detectado: {} px".format(ancho_px_lat))
+        print("  px_por_mm_lateral = {} px/mm".format(px_por_mm_lateral))
 
-    ruta_lateral = os.path.join(CARPETA_CAPTURAS, "calibracion_lateral.jpg")
-    ancho_px_lat, _ = _capturar_y_medir(1, ruta_lateral)
-    px_por_mm_lateral = round(ancho_px_lat / mm_referencia, 4)
-
-    print("  Objeto detectado: {} px".format(ancho_px_lat))
-    print("  px_por_mm_lateral = {} px/mm".format(px_por_mm_lateral))
-
-    # ─── Guardar resultado ────────────────────────────────────────────────────
-    calibracion = {
-        "px_por_mm_superior": px_por_mm_superior,
-        "px_por_mm_lateral":  px_por_mm_lateral,
-    }
-
-    with open(RUTA_CALIBRACION, "w") as f:
-        json.dump(calibracion, f, indent=2)
-
-    print("\nCalibración guardada en calibracion_camaras.json:")
-    print("  px_por_mm_superior = {} px/mm".format(px_por_mm_superior))
-    print("  px_por_mm_lateral  = {} px/mm".format(px_por_mm_lateral))
-    print("\nListo. Las cámaras están calibradas.")
+        # ─── Guardar resultado ────────────────────────────────────────────────
+        _guardar_ambas(px_por_mm_superior, px_por_mm_lateral)
+        print("\nCalibración guardada en calibracion_camaras.json:")
+        print("  px_por_mm_superior = {} px/mm".format(px_por_mm_superior))
+        print("  px_por_mm_lateral  = {} px/mm".format(px_por_mm_lateral))
+        print("\nListo. Las cámaras están calibradas.")
 
 
 if __name__ == "__main__":
