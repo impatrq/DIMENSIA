@@ -72,13 +72,6 @@ async function cargarInspecciones() {
       tabla.appendChild(fila);
     });
 
-    const total = data.length;
-    const aprobadas = data.filter(i => i.resultado === 'APROBADA').length;
-    const rechazadas = total - aprobadas;
-    document.querySelector('.metric-value.blue').textContent = total;
-    document.querySelector('.metric-value.green').textContent = aprobadas;
-    document.querySelector('.metric-value.red').textContent = rechazadas;
-
     // ── ALERTA DE RACHA DE RECHAZOS ──────────────────
     const alerta = document.getElementById('alerta-racha');
     const alertaTexto = document.getElementById('alerta-racha-texto');
@@ -97,6 +90,56 @@ async function cargarInspecciones() {
 
   } catch (err) {
     console.log('Backend no disponible, mostrando datos de ejemplo');
+  }
+}
+
+// ── RESUMEN DEL DÍA (métricas, rendimiento por pieza y contador) ──
+// Porcentaje con 1 decimal; "—" si no hay total (evita dividir por cero)
+function pctDelTotal(n, total) {
+  return total ? fmtDim(n * 100 / total, '%') : '—';
+}
+
+async function cargarResumen() {
+  try {
+    const [resResumen, resPiezas] = await Promise.all([fetch(`${API}/resumen`), fetch(`${API}/piezas`)]);
+    const resumen = await resResumen.json();
+    const piezas  = resPiezas.ok ? await resPiezas.json() : [];
+
+    const { total, aprobadas, rechazadas } = resumen;
+    document.querySelector('.metric-value.blue').textContent  = total || '—';
+    document.querySelector('.metric-value.green').textContent = total ? aprobadas : '—';
+    document.querySelector('.metric-value.red').textContent   = total ? rechazadas : '—';
+    document.getElementById('metric-aprobadas-pct').textContent  = `${pctDelTotal(aprobadas, total)} del total`;
+    document.getElementById('metric-rechazadas-pct').textContent = `${pctDelTotal(rechazadas, total)} del total`;
+
+    document.getElementById('contador-total').textContent      = total || '—';
+    document.getElementById('contador-aprobadas').textContent  = `${total ? aprobadas : '—'} aprobadas`;
+    document.getElementById('contador-rechazadas').textContent = `${total ? rechazadas : '—'} rechazadas`;
+
+    // Barras: todas las piezas registradas más las inspeccionadas que no estén en la tabla
+    const porPieza = Object.fromEntries((resumen.por_pieza || []).map(p => [p.pieza, p]));
+    const nombres  = [...new Set([...(Array.isArray(piezas) ? piezas.map(p => p.nombre) : []), ...Object.keys(porPieza)])];
+    const lista = document.getElementById('rendimiento-piezas');
+    if (!lista) return;
+    if (nombres.length === 0) {
+      lista.innerHTML = '<div style="text-align:center;color:#9AA3B8;padding:16px">Sin datos</div>';
+      return;
+    }
+    lista.innerHTML = nombres.map(nombre => {
+      const p     = porPieza[nombre];
+      const pct   = p && p.total ? Math.round(p.aprobadas * 100 / p.total) : null;
+      const color = pct != null && pct < 90 ? 'red' : 'green';
+      return `
+        <div class="bar-item">
+          <div class="bar-info">
+            <span class="bar-label">${nombre}</span>
+            <span class="bar-pct ${color}">${pct != null ? pct + '%' : '—'}</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill ${color}" style="width:${pct ?? 0}%"></div></div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    console.log('No se pudo cargar el resumen del día');
   }
 }
 
@@ -180,6 +223,7 @@ async function cargarPiezas() {
     const arg = (v) => JSON.stringify(v ?? null).replace(/'/g, '&#39;');
     data.forEach(pieza => {
       const fila = document.createElement('tr');
+      fila.dataset.pieza = pieza.nombre;
       const onclick = `editarPieza(${arg(pieza.id)}, ${arg(pieza.nombre)}, ${arg(pieza.norma)}, `
         + `${arg(pieza.alto_ref)}, ${arg(pieza.alto_tol)}, ${arg(pieza.ancho_ref)}, ${arg(pieza.ancho_tol)}, `
         + `${arg(pieza.largo_ref)}, ${arg(pieza.largo_tol)})`;
@@ -188,12 +232,65 @@ async function cargarPiezas() {
         <td class="mono">${pieza.norma || '—'}</td>
         <td class="mono">${pieza.alto_ref ? pieza.alto_ref + ' mm' : '—'}</td>
         <td class="mono">${pieza.ancho_ref ? pieza.ancho_ref + ' mm' : '—'}</td>
-        <td><button class="pill pend" style="cursor:pointer;border:none;font:inherit" onclick='${onclick}'>editar</button></td>
+        <td><button class="pill pend" style="cursor:pointer;border:none;font:inherit" onclick='${onclick}'>editar</button>
+          <button class="pill ok" style="cursor:pointer;border:none;font:inherit" onclick='seleccionarPieza(${arg(pieza.nombre)})'>Seleccionar para este turno</button></td>
       `;
       tbody.appendChild(fila);
     });
+    marcarFilaPiezaActiva();
   } catch (err) {
     console.log('No se pudieron cargar las piezas');
+  }
+}
+
+// ── PIEZA ACTIVA DEL TURNO ──────────────────────────────────
+let piezaActiva = null;
+
+function mostrarPiezaActiva(data) {
+  const badge = document.getElementById('pieza-activa-badge');
+  if (!badge) return;
+  if (!data || !data.pieza) {
+    badge.textContent = 'Sin pieza seleccionada';
+    badge.title = '';
+    return;
+  }
+  badge.textContent = `Pieza: ${data.pieza}`;
+  badge.title = `Alto ${fmtDim(data.alto_ref)} ± ${fmtDim(data.alto_tol, ' mm')} · `
+    + `Ancho ${fmtDim(data.ancho_ref)} ± ${fmtDim(data.ancho_tol, ' mm')} · `
+    + `Largo ${fmtDim(data.largo_ref)} ± ${fmtDim(data.largo_tol, ' mm')}`;
+}
+
+function marcarFilaPiezaActiva() {
+  document.querySelectorAll('#page-piezas .data-table tbody tr').forEach(fila => {
+    fila.classList.toggle('pieza-activa', piezaActiva != null && fila.dataset.pieza === piezaActiva);
+  });
+}
+
+async function cargarPiezaActiva() {
+  try {
+    const res  = await fetch(`${API}/pieza_activa`);
+    const data = await res.json();
+    piezaActiva = data.pieza || null;
+    mostrarPiezaActiva(data);
+    marcarFilaPiezaActiva();
+  } catch (err) {
+    const badge = document.getElementById('pieza-activa-badge');
+    if (badge) badge.textContent = 'Pieza: sin conexión';
+    console.log('No se pudo cargar la pieza activa');
+  }
+}
+
+async function seleccionarPieza(nombre) {
+  try {
+    const res = await fetch(`${API}/pieza_activa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pieza: nombre })
+    });
+    if (!res.ok) throw new Error('Error al seleccionar la pieza');
+    await cargarPiezaActiva();
+  } catch (err) {
+    alert('❌ No se pudo seleccionar la pieza');
   }
 }
 
@@ -296,7 +393,6 @@ async function cargarUltimaInspeccion() {
     const insp = data[0];
     document.getElementById('insp-tipo').textContent     = insp.pieza    || '—';
     document.getElementById('insp-numero-serie').textContent = insp.numero_serie || '—';
-    document.getElementById('insp-norma').textContent    = '—';
     document.getElementById('insp-alto').textContent     = fmtDim(insp.alto,  ' mm');
     document.getElementById('insp-ancho').textContent    = fmtDim(insp.ancho, ' mm');
     document.getElementById('insp-largo').textContent    = fmtDim(insp.largo, ' mm');
@@ -306,9 +402,24 @@ async function cargarUltimaInspeccion() {
     document.getElementById('insp-resultado-box').className       = aprobada ? 'result-box ok' : 'result-box fail';
     document.getElementById('insp-resultado-icon').textContent    = aprobada ? '✓' : '✗';
     document.getElementById('insp-resultado-titulo').textContent  = insp.resultado;
-    document.getElementById('insp-resultado-sub').textContent     = aprobada
-      ? 'Todas las dimensiones dentro de tolerancia'
-      : 'Una o más dimensiones fuera de tolerancia';
+    // Medición parcial: listar solo las dimensiones que se midieron
+    const medidas = ['alto', 'ancho', 'largo'].filter(dim => insp[dim] != null && insp[dim] !== '');
+    document.getElementById('insp-resultado-sub').textContent     = medidas.length < 3
+      ? `${aprobada ? 'Dentro' : 'Fuera'} de tolerancia (medido: ${medidas.join(', ') || '—'})`
+      : aprobada
+        ? 'Todas las dimensiones dentro de tolerancia'
+        : 'Una o más dimensiones fuera de tolerancia';
+    document.getElementById('insp-estado-etiqueta').textContent  = 'Última medición';
+
+    // Norma de la pieza (viene en GET /piezas)
+    try {
+      const resPiezas = await fetch(`${API}/piezas`);
+      const piezas    = await resPiezas.json();
+      const pieza     = Array.isArray(piezas) ? piezas.find(p => p.nombre === insp.pieza) : null;
+      document.getElementById('insp-norma').textContent = pieza?.norma || '—';
+    } catch (err) {
+      document.getElementById('insp-norma').textContent = '—';
+    }
 
   } catch (err) {
     console.log('No se pudo cargar la última inspección');
@@ -317,13 +428,16 @@ async function cargarUltimaInspeccion() {
 
 // ── INICIAR ──────────────────────────────────────────────────
 cargarInspecciones();
+cargarResumen();
 cargarPiezas();
+cargarPiezaActiva();
 cargarSensores();
 cargarUltimaInspeccion();
 cargarHistorial();
 cargarServos();
 cargarAlertaHardware();
 setInterval(cargarInspecciones,    5000);
+setInterval(cargarResumen,         5000);
 setInterval(cargarSensores,        2000);
 setInterval(cargarUltimaInspeccion,3000);
 setInterval(cargarHistorial,      10000);
