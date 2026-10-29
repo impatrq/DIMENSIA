@@ -82,6 +82,7 @@
       <div class="topbar-right">
         <div class="turno-badge" id="operario-badge" style="display:none"></div>
         <div class="turno-badge">Turno mañana</div>
+        <div class="turno-badge" id="pieza-activa-badge">Sin pieza seleccionada</div>
         <a onclick="exportarCSV()" class="btn-export" style="cursor:pointer">Exportar CSV</a>
       </div>
     </header>
@@ -107,22 +108,22 @@
         <div class="metrics-grid">
           <div class="metric-card">
             <div class="metric-label">Piezas hoy</div>
-            <div class="metric-value blue">247</div>
-            <div class="metric-sub">+12% vs ayer</div>
+            <div class="metric-value blue">—</div>
+            <div class="metric-sub">—</div>
           </div>
           <div class="metric-card">
             <div class="metric-label">Aprobadas</div>
-            <div class="metric-value green">231</div>
-            <div class="metric-sub">93.5% del total</div>
+            <div class="metric-value green">—</div>
+            <div class="metric-sub" id="metric-aprobadas-pct">— del total</div>
           </div>
           <div class="metric-card">
             <div class="metric-label">Rechazadas</div>
-            <div class="metric-value red">16</div>
-            <div class="metric-sub">6.5% del total</div>
+            <div class="metric-value red">—</div>
+            <div class="metric-sub" id="metric-rechazadas-pct">— del total</div>
           </div>
           <div class="metric-card">
             <div class="metric-label">Velocidad actual</div>
-            <div class="metric-value">4.2/min</div>
+            <div class="metric-value">—</div>
             <div class="metric-sub">piezas por minuto</div>
           </div>
         </div>
@@ -134,37 +135,10 @@
           <div class="card">
             <div class="card-header">
               <div class="card-title">Rendimiento por tipo de pieza</div>
-              <span class="card-sub">Últimas 8 horas</span>
+              <span class="card-sub">Hoy · % aprobadas</span>
             </div>
-            <div class="bar-list">
-              <div class="bar-item">
-                <div class="bar-info">
-                  <span class="bar-label">Niple NPT 1/2"</span>
-                  <span class="bar-pct green">97%</span>
-                </div>
-                <div class="bar-track"><div class="bar-fill green" style="width:97%"></div></div>
-              </div>
-              <div class="bar-item">
-                <div class="bar-info">
-                  <span class="bar-label">Union NPT 3/4"</span>
-                  <span class="bar-pct green">91%</span>
-                </div>
-                <div class="bar-track"><div class="bar-fill green" style="width:91%"></div></div>
-              </div>
-              <div class="bar-item">
-                <div class="bar-info">
-                  <span class="bar-label">Brida DN25</span>
-                  <span class="bar-pct red">78%</span>
-                </div>
-                <div class="bar-track"><div class="bar-fill red" style="width:78%"></div></div>
-              </div>
-              <div class="bar-item">
-                <div class="bar-info">
-                  <span class="bar-label">Codo 90° 1/2"</span>
-                  <span class="bar-pct green">95%</span>
-                </div>
-                <div class="bar-track"><div class="bar-fill green" style="width:95%"></div></div>
-              </div>
+            <div class="bar-list" id="rendimiento-piezas">
+              <div style="text-align:center;color:#9AA3B8;padding:16px">Cargando datos...</div>
             </div>
           </div>
 
@@ -203,7 +177,7 @@
           <div class="card">
             <div class="card-header">
               <div class="card-title">Pieza en estación</div>
-              <span class="card-sub live-dot-wrap"><span class="live-dot"></span>Midiendo</span>
+              <span class="card-sub live-dot-wrap"><span class="live-dot"></span><span id="insp-estado-etiqueta">Midiendo</span></span>
             </div>
             <div class="live-rows">
               <div class="live-row"><span class="live-label">Tipo</span><span class="live-val" id="insp-tipo">Sin inspecciones</span></div>
@@ -236,24 +210,24 @@
             <div class="card">
               <div class="card-title">Contador del turno</div>
               <div class="big-counter">
-                <div class="counter-num">89</div>
+                <div class="counter-num" id="contador-total">—</div>
                 <div class="counter-label">piezas inspeccionadas</div>
                 <div class="counter-pills">
-                  <span class="pill ok">85 aprobadas</span>
-                  <span class="pill fail">4 rechazadas</span>
+                  <span class="pill ok" id="contador-aprobadas">— aprobadas</span>
+                  <span class="pill fail" id="contador-rechazadas">— rechazadas</span>
                 </div>
               </div>
             </div>
             <div class="card">
               <div class="card-title">Tiempo de ciclo</div>
               <div class="cycle-display">
-                <span class="cycle-num mono">1.8</span>
+                <span class="cycle-num mono">—</span>
                 <span class="cycle-unit">segundos</span>
               </div>
               <div class="cycle-bar-wrap">
-                <div class="cycle-bar" style="width:36%"></div>
+                <div class="cycle-bar" style="width:0%"></div>
               </div>
-              <div class="cycle-ref">Máximo: 5 seg | Promedio hoy: 1.9 seg</div>
+              <div class="cycle-ref">Máximo: — | Promedio hoy: —</div>
             </div>
           </div>
         </div>
@@ -266,15 +240,15 @@
           </div>
           <div class="live-rows">
             <div class="live-row">
-              <span class="live-label">Final de carrera superior</span>
+              <span class="live-label">Final de carrera superior <span style="color:var(--amarillo)">(simulado)</span></span>
               <span class="live-val mono"><span class="sensor-dot" id="fc-superior-dot"></span><span id="fc-superior-text">—</span></span>
             </div>
             <div class="live-row">
-              <span class="live-label">Final de carrera inferior</span>
+              <span class="live-label">Final de carrera inferior <span style="color:var(--amarillo)">(simulado)</span></span>
               <span class="live-val mono"><span class="sensor-dot" id="fc-inferior-dot"></span><span id="fc-inferior-text">—</span></span>
             </div>
             <div class="live-row">
-              <span class="live-label">Puerta de carga</span>
+              <span class="live-label">Puerta de carga <span style="color:var(--amarillo)">(simulado)</span></span>
               <span class="live-val mono"><span class="sensor-dot" id="puerta-dot"></span><span id="puerta-text">—</span></span>
             </div>
           </div>
@@ -460,7 +434,7 @@
         </div>
         <div class="card" style="margin-top:16px">
           <div class="card-header">
-            <div class="card-title">247 inspecciones encontradas</div>
+            <div class="card-title">— inspecciones encontradas</div>
             <a onclick="exportarCSV()" class="btn-ghost" style="cursor:pointer">Exportar CSV</a>
           </div>
           <table class="data-table">
@@ -468,12 +442,6 @@
               <tr><th>#</th><th>Pieza</th><th>N° Serie</th><th>Alto (mm)</th><th>Ancho (mm)</th><th>Largo (mm)</th><th>Estado</th><th>Motivo</th><th>Fecha y hora</th><th>Capturas</th></tr>
             </thead>
             <tbody id="historial-table">
-              <tr><td class="mono gray">#247</td><td>Niple NPT 1/2"</td><td class="mono">21.3</td><td class="mono">21.3</td><td class="mono">58.2</td><td><span class="pill ok">Aprobada</span></td><td>—</td><td class="gray small">Hoy 14:32</td><td><button class="btn-ghost" onclick="verCapturas(247)">Ver</button></td></tr>
-              <tr><td class="mono gray">#246</td><td>Brida DN25</td><td class="mono">25.9</td><td class="mono">26.1</td><td class="mono">42.1</td><td><span class="pill fail">Rechazada</span></td><td>—</td><td class="gray small">Hoy 14:31</td><td><button class="btn-ghost" onclick="verCapturas(246)">Ver</button></td></tr>
-              <tr><td class="mono gray">#245</td><td>Union NPT 3/4"</td><td class="mono">26.7</td><td class="mono">26.8</td><td class="mono">65.0</td><td><span class="pill ok">Aprobada</span></td><td>—</td><td class="gray small">Hoy 14:29</td><td><button class="btn-ghost" onclick="verCapturas(245)">Ver</button></td></tr>
-              <tr><td class="mono gray">#244</td><td>Niple NPT 1/2"</td><td class="mono">21.3</td><td class="mono">21.3</td><td class="mono">57.9</td><td><span class="pill ok">Aprobada</span></td><td>—</td><td class="gray small">Hoy 14:28</td><td><button class="btn-ghost" onclick="verCapturas(244)">Ver</button></td></tr>
-              <tr><td class="mono gray">#243</td><td>Codo 90° 1/2"</td><td class="mono">21.3</td><td class="mono">21.3</td><td class="mono">38.5</td><td><span class="pill ok">Aprobada</span></td><td>—</td><td class="gray small">Hoy 14:26</td><td><button class="btn-ghost" onclick="verCapturas(243)">Ver</button></td></tr>
-              <tr><td class="mono gray">#242</td><td>Brida DN25</td><td class="mono">25.8</td><td class="mono">26.0</td><td class="mono">41.9</td><td><span class="pill fail">Rechazada</span></td><td>—</td><td class="gray small">Hoy 14:24</td><td><button class="btn-ghost" onclick="verCapturas(242)">Ver</button></td></tr>
             </tbody>
           </table>
         </div>
