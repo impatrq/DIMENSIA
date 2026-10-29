@@ -217,6 +217,32 @@ def obtener_inspecciones():
     conn.close()
     return filas
 
+# ── RESUMEN DE INSPECCIONES DE UN DIA ────────────────
+# Cuenta en la base (sin el LIMIT de obtener_inspecciones); fecha en formato AAAA-MM-DD
+def obtener_resumen(fecha):
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute('''
+        SELECT pieza,
+               COUNT(*) AS total,
+               SUM(resultado = 'APROBADA')  AS aprobadas,
+               SUM(resultado = 'RECHAZADA') AS rechazadas
+        FROM inspecciones
+        WHERE substr(fecha, 1, 10) = ?
+        GROUP BY pieza
+        ORDER BY pieza
+    ''', (fecha,))
+    por_pieza = [dict(f) for f in c.fetchall()]
+    conn.close()
+    return {
+        'fecha': fecha,
+        'total': sum(p['total'] for p in por_pieza),
+        'aprobadas': sum(p['aprobadas'] for p in por_pieza),
+        'rechazadas': sum(p['rechazadas'] for p in por_pieza),
+        'por_pieza': por_pieza
+    }
+
 # ── GUARDAR PIEZA ────────────────────────────────────
 def guardar_pieza(datos):
     conn = sqlite3.connect(DB)
