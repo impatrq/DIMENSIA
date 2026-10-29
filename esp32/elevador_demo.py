@@ -31,7 +31,8 @@ T_RAMPA_MS = 2000          # ms para ir de F_INICIAL a f_max
 PERIODO_LECTURA_MS = 5     # cada cuánto se revisa el final de carrera
 PERIODO_RAMPA_MS = 50      # cada cuánto se actualiza la frecuencia de la rampa
 ESPERA_DIR_MS = 5          # espera entre setear DIR y el primer pulso
-TIMEOUT_MS = 60000         # timeout por tiempo, por defecto
+TIMEOUT_MS = 45000         # timeout por tiempo, por defecto
+LIBERAR_MS = 3000          # ms que se espera a que se libere el final del sentido opuesto
 DUTY_50 = 32768            # duty_u16 al 50 %
 
 
@@ -55,10 +56,12 @@ class ElevadorDemo:
         time.sleep_ms(PERIODO_LECTURA_MS)
         return fc.value() == 0
 
-    def _mover(self, sentido, fc, f_max, timeout_ms):
+    def _mover(self, sentido, fc, fc_opuesto, f_max, timeout_ms):
         """
         Mueve el carro en el sentido indicado hasta que fc se active
-        (True) o venza timeout_ms (False). Siempre termina en parar().
+        (True) o venza timeout_ms (False). Si fc_opuesto está activo al
+        arrancar y no se libera en LIBERAR_MS, o se activa durante el
+        movimiento, para y devuelve False. Siempre termina en parar().
         """
         if not 0 < f_max <= F_LIMITE:
             raise ValueError("f_max fuera de rango: {}".format(f_max))
@@ -66,6 +69,13 @@ class ElevadorDemo:
         # Si ya está en el final de carrera, no mover
         if self._confirmado(fc):
             return True
+
+        # Si el final opuesto está activo, esperar a que se libere
+        t_espera = time.ticks_ms()
+        while self._confirmado(fc_opuesto):
+            if time.ticks_diff(time.ticks_ms(), t_espera) >= LIBERAR_MS:
+                return False
+            time.sleep_ms(PERIODO_LECTURA_MS)
 
         try:
             self._pwm = PWM(Pin(PIN_STEP), freq=F_INICIAL, duty_u16=0)
@@ -76,6 +86,7 @@ class ElevadorDemo:
             f_actual = F_INICIAL
             t_ultima_rampa = 0     # ms desde t0 de la última actualización de freq
             lecturas_en_0 = 0
+            lecturas_opuesto = 0
             self._pwm.duty_u16(DUTY_50)
 
             while True:
@@ -87,6 +98,15 @@ class ElevadorDemo:
                         return True
                 else:
                     lecturas_en_0 = 0
+
+                # Final del sentido opuesto: dos lecturas seguidas en 0
+                if fc_opuesto.value() == 0:
+                    lecturas_opuesto += 1
+                    if lecturas_opuesto >= 2:
+                        self._pwm.duty_u16(0)
+                        return False
+                else:
+                    lecturas_opuesto = 0
 
                 t = time.ticks_diff(time.ticks_ms(), t0)
                 if t >= timeout_ms:
@@ -111,13 +131,15 @@ class ElevadorDemo:
             self.parar()
 
     def subir(self, f_max=F_MAX, timeout_ms=TIMEOUT_MS):
-        """Sube hasta el final de carrera superior. True si llegó, False si timeout."""
-        return self._mover(SENTIDO_SUBIR, self._fc_arriba, f_max, timeout_ms)
+        """Sube hasta el final de carrera superior. True si llegó, False si timeout o final de ABAJO activo."""
+        return self._mover(SENTIDO_SUBIR, self._fc_arriba, self._fc_abajo,
+                           f_max, timeout_ms)
 
     def bajar(self, f_max=F_MAX, timeout_ms=TIMEOUT_MS):
-        """Baja hasta el final de carrera inferior. True si llegó, False si timeout."""
+        """Baja hasta el final de carrera inferior. True si llegó, False si timeout o final de ARRIBA activo."""
         # Sentido contrario a SENTIDO_SUBIR (asume valores 0/1)
-        return self._mover(1 - SENTIDO_SUBIR, self._fc_abajo, f_max, timeout_ms)
+        return self._mover(1 - SENTIDO_SUBIR, self._fc_abajo, self._fc_arriba,
+                           f_max, timeout_ms)
 
     def parar(self):
         """
