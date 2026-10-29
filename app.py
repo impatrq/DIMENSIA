@@ -3,7 +3,7 @@ import os
 import csv
 from flask import Flask, jsonify, request, Response, send_file, abort
 from flask_cors import CORS
-from database import init_db, obtener_inspecciones, guardar_inspeccion, obtener_piezas, guardar_pieza, editar_pieza, guardar_calibracion, obtener_calibracion, obtener_calibraciones, obtener_capturas, CARPETA_CAPTURAS, fecha_arg
+from database import init_db, obtener_inspecciones, obtener_resumen, guardar_inspeccion, obtener_piezas, obtener_pieza_por_nombre, guardar_pieza, editar_pieza, guardar_calibracion, obtener_calibracion, obtener_calibraciones, obtener_capturas, CARPETA_CAPTURAS, fecha_arg
 
 app = Flask(__name__) 
 CORS(app)
@@ -43,6 +43,11 @@ def nueva_inspeccion():
 def get_inspecciones():
     inspecciones = obtener_inspecciones()
     return jsonify(inspecciones)
+
+# Totales del dia (hora Argentina) y por pieza, para el panel y el contador
+@app.route('/resumen', methods=['GET'])
+def get_resumen():
+    return jsonify(obtener_resumen(fecha_arg()[:10]))
 
 # Guardar una nueva pieza
 @app.route('/piezas', methods=['POST'])
@@ -92,10 +97,18 @@ def set_pieza_activa():
     pieza_activa['pieza'] = datos.get('pieza')
     return jsonify({'estado': 'ok'})
 
-# Obtener pieza activa
+# Campos de referencia que acompañan a la pieza activa
+CAMPOS_REF_PIEZA = ('alto_ref', 'alto_tol', 'ancho_ref', 'ancho_tol', 'largo_ref', 'largo_tol')
+
+# Obtener pieza activa con sus referencias (null si no hay pieza o no esta en la tabla)
 @app.route('/pieza_activa', methods=['GET'])
 def get_pieza_activa():
-    return jsonify(pieza_activa)
+    nombre = pieza_activa['pieza']
+    pieza = obtener_pieza_por_nombre(nombre) if nombre else None
+    respuesta = {'pieza': nombre}
+    for campo in CAMPOS_REF_PIEZA:
+        respuesta[campo] = pieza.get(campo) if pieza else None
+    return jsonify(respuesta)
 
 # Guardar calibracion de las camaras (factor px/mm)
 @app.route('/calibracion', methods=['POST'])
