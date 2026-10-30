@@ -1,6 +1,7 @@
 import io
 import os
 import csv
+from datetime import datetime
 from flask import Flask, jsonify, request, Response, send_file, abort
 from flask_cors import CORS
 from database import init_db, obtener_inspecciones, obtener_resumen, guardar_inspeccion, obtener_piezas, obtener_pieza_por_nombre, guardar_pieza, editar_pieza, guardar_calibracion, obtener_calibracion, obtener_calibraciones, obtener_capturas, CARPETA_CAPTURAS, fecha_arg
@@ -10,6 +11,26 @@ CORS(app)
 
 # Inicializar base de datos al arrancar
 init_db()
+
+# Lee los filtros opcionales tipo, estado, desde y hasta; devuelve (filtros, respuesta_de_error)
+def leer_filtros(con_estado=False):
+    filtros = {
+        'tipo': request.args.get('tipo', '').strip() or None,
+        'desde': request.args.get('desde', '').strip() or None,
+        'hasta': request.args.get('hasta', '').strip() or None,
+    }
+    if con_estado:
+        estado = request.args.get('estado', '').strip().upper() or None
+        if estado not in (None, 'APROBADA', 'RECHAZADA'):
+            return None, (jsonify({'error': 'estado debe ser APROBADA o RECHAZADA'}), 400)
+        filtros['estado'] = estado
+    for nombre in ('desde', 'hasta'):
+        if filtros[nombre]:
+            try:
+                datetime.strptime(filtros[nombre], '%Y-%m-%d')
+            except ValueError:
+                return None, (jsonify({'error': f'{nombre} debe tener formato aaaa-mm-dd'}), 400)
+    return filtros, None
 
 # ── RUTAS ────────────────────────────────────────────
 
@@ -41,8 +62,10 @@ def nueva_inspeccion():
 # Obtener todas las inspecciones para el dashboard
 @app.route('/inspecciones', methods=['GET'])
 def get_inspecciones():
-    inspecciones = obtener_inspecciones()
-    return jsonify(inspecciones)
+    filtros, error = leer_filtros(con_estado=True)
+    if error:
+        return error
+    return jsonify(obtener_inspecciones(**filtros))
 
 # Totales del dia (hora Argentina) y por pieza, para el panel y el contador
 @app.route('/resumen', methods=['GET'])
@@ -306,26 +329,29 @@ def resolver_alerta_hardware():
 # ── EXPORTAR CSV ────────────────────────────────────
 @app.route('/exportar', methods=['GET'])
 def exportar_csv():
-    inspecciones = obtener_inspecciones()
+    filtros, error = leer_filtros()
+    if error:
+        return error
+    inspecciones = obtener_inspecciones(**filtros, limite=None)
     output = io.StringIO()
     writer = csv.writer(output, delimiter=';')
     output.write('sep=;\n')
-    writer.writerow(['#', 'Pieza', 'N° Serie', 'Alto (mm)', 'Ancho (mm)', 'Largo (mm)', 'Estado', 'Operario', 'Fecha'])
+    writer.writerow(['#', 'Pieza', 'N Serie', 'Alto (mm)', 'Ancho (mm)', 'Largo (mm)', 'Estado', 'Operario', 'Fecha'])
     for i in inspecciones:
         writer.writerow([
             i.get('id', ''),
-            i.get('pieza') or '—',
-            i.get('numero_serie') or '—',
-            f"{i['alto']:.1f}" if i.get('alto') is not None else '—',
-            f"{i['ancho']:.1f}" if i.get('ancho') is not None else '—',
-            f"{i['largo']:.1f}" if i.get('largo') is not None else '—',
-            i.get('resultado', '—'),
-            i.get('operario') or '—',
-            i.get('fecha', '—')
+            i.get('pieza') or '-',
+            i.get('numero_serie') or '-',
+            f"{i['alto']:.1f}" if i.get('alto') is not None else '-',
+            f"{i['ancho']:.1f}" if i.get('ancho') is not None else '-',
+            f"{i['largo']:.1f}" if i.get('largo') is not None else '-',
+            i.get('resultado', '-'),
+            i.get('operario') or '-',
+            i.get('fecha', '-')
         ])
     return Response(
-        output.getvalue(),
-        mimetype='text/csv',
+        output.getvalue().encode('utf-8-sig'),
+        content_type='text/csv; charset=utf-8',
         headers={'Content-Disposition': 'attachment; filename=inspecciones_dimensia.csv'}
     )
 
