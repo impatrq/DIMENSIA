@@ -37,6 +37,10 @@ PUERTO_SERIE = "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5C2E008291-if00"
 # Tiempo máximo esperando la señal ARRIBA de la ESP32 (segundos)
 TIMEOUT_ARRIBA_SEG = 60
 
+# Tiempo máximo esperando LISTO tras FIN en modo --iniciar (segundos)
+# LISTO indica que el elevador terminó de bajar y la ESP32 acepta otro INICIAR.
+TIMEOUT_LISTO_SEG = 60
+
 # Cuadros que se descartan con grab() antes de cada captura para vaciar el
 # buffer interno de la cámara y obtener un frame fresco.
 CUADROS_DESCARTADOS = 4

@@ -7,31 +7,55 @@ Script: `raspberry/ciclo_serial.py`
 Corre en la Raspberry Pi y coordina la inspección completa de piezas
 en modo automatizado, sin intervención manual:
 
-1. Limpia el buffer serial y espera la señal `ARRIBA` de la ESP32.
-2. Consulta `/pieza_activa` para actualizar la pieza del ciclo (si cambió en el dashboard, lo avisa).
-3. Repite N pasos de rotación (default 8): limpia buffer, envía `PASO`, espera `PASO_OK`,
+1. **(Modo `--iniciar`)** Espera ENTER del operario, envía `INICIAR` a la ESP32.
+2. Limpia el buffer serial y espera la señal `ARRIBA` de la ESP32.
+3. Consulta `/pieza_activa` para actualizar la pieza del ciclo (si cambió en el dashboard, lo avisa).
+4. Repite N pasos de rotación (default 8): limpia buffer, envía `PASO`, espera `PASO_OK`,
    espera 0.3 s a que el plato se asiente, captura frames frescos con ambas cámaras y mide.
    El ángulo de cada captura corresponde a la posición después del giro.
-4. Calcula la **mediana** de las N mediciones (diámetro, largo, alto).
-5. Evalúa contra las referencias de la pieza activa.
+5. Calcula la **mediana** de las N mediciones (diámetro, largo, alto).
+6. Evalúa contra las referencias de la pieza activa.
    Si hay menos de 4 mediciones o no se puede evaluar ninguna dimensión,
    el resultado es `RECHAZADA` y se registra igual en el backend.
-6. Envía un único `POST /inspeccion` **siempre** (incluso ciclos inválidos)
+7. Envía `FIN APROBADA` o `FIN RECHAZADA` a la ESP32 **inmediatamente**,
+   antes del POST, para no superar el timeout de silencio de la ESP32 (30 s).
+8. Envía un único `POST /inspeccion` **siempre** (incluso ciclos inválidos)
    con la captura más representativa (la más cercana a la mediana de diámetro).
    El POST se reintenta 3 veces; si persiste, el payload se guarda en `capturas/pendientes/`.
-7. Borra los JPG del ciclo que no sean la captura representativa
+   El POST puede tardar ~17 s (3 reintentos + 1 s entre cada uno).
+9. Borra los JPG del ciclo que no sean la captura representativa
    (usar `--conservar-capturas` para conservarlos todos).
-8. Envía `FIN APROBADA` o `FIN RECHAZADA` a la ESP32 **aunque el POST haya fallado**.
-9. Vuelve al paso 1.
+10. **(Modo `--iniciar`)** Espera `LISTO` de la ESP32 (elevador terminó de bajar,
+    listo para otro `INICIAR`). Timeout: `TIMEOUT_LISTO_SEG = 60 s`.
+    Si no llega `LISTO`, avisa y continúa igual.
+11. Vuelve al paso 1.
 
 ## Protocolo Serial
 
 ```
-ESP32 → RPi:   ARRIBA | PASO_OK | ERROR <detalle>
-RPi   → ESP32: PASO   | FIN APROBADA | FIN RECHAZADA
+ESP32 → RPi:   ARRIBA | PASO_OK | ERROR <detalle> | LISTO
+RPi   → ESP32: INICIAR | PASO | FIN APROBADA | FIN RECHAZADA
 ```
 
 Cualquier otra línea recibida = debug de MicroPython → se ignora.
+Con `--debug-serial` todas las líneas se imprimen con prefijo `[ESP32] `.
+
+### Timeouts de la ESP32
+
+| Evento | Timeout | Acción ESP32 |
+|---|---|---|
+| Tiempo para llegar al tope | 45 s | `ERROR TIMEOUT_SUBIDA` |
+| Silencio sin recibir `PASO` (plato arriba) | 60 s | `ERROR TIMEOUT_RPI` |
+| Silencio total mientras está arriba | 30 s | `ERROR TIMEOUT_SILENCIO` |
+
+Por eso **FIN se envía antes del POST**: el POST con 3 reintentos y 1 s entre cada uno
+puede tardar hasta ~17 s, lo que consumiría más de la mitad del timeout de silencio.
+
+### Señal LISTO
+
+`LISTO` la emite la ESP32 cuando el elevador terminó de bajar después de recibir `FIN`.
+Indica que la máquina acepta otro `INICIAR`. Solo relevante en modo `--iniciar`.
+La ESP32 reenvía `ARRIBA` cada 2 s hasta recibir el primer `PASO`.
 
 ## Requisitos previos
 
@@ -51,8 +75,17 @@ curl -X POST http://localhost:5000/pieza_activa -H "Content-Type: application/js
 # Producción (ESP32 conectada, backend corriendo):
 python ciclo_serial.py
 
+# Producción con ciclo disparado por operario (ENTER + INICIAR + esperar LISTO):
+python ciclo_serial.py --iniciar
+
+# Ver todo lo que llega por serial:
+python ciclo_serial.py --debug-serial
+
 # Prueba en mesa sin hardware serial (simula ARRIBA/PASO_OK con ENTER):
 python ciclo_serial.py --sin-serial --sin-enviar
+
+# Prueba en mesa con modo --iniciar (INICIAR responde ARRIBA sin ENTER adicional):
+python ciclo_serial.py --sin-serial --sin-enviar --iniciar
 
 # Ciclo corto (4 pasos en lugar de 8):
 python ciclo_serial.py --pasos 4
@@ -65,7 +98,9 @@ python ciclo_serial.py --sin-serial --sin-enviar --pasos 4
 
 | Opción | Descripción |
 |---|---|
-| `--sin-serial` | Simula la ESP32 dentro de Python. Cada `PASO` responde automáticamente `PASO_OK`. Pide ENTER para simular `ARRIBA`. |
+| `--iniciar` | Pide ENTER al operario, envía `INICIAR` a la ESP32 y espera `LISTO` al final de cada ciclo. Sin esta opción la ESP32 dispara el ciclo con el botón físico (D4). |
+| `--debug-serial` | Imprime cada línea recibida de la ESP32 con prefijo `[ESP32] `, incluyendo las ignoradas. |
+| `--sin-serial` | Simula la ESP32 dentro de Python. Con `--iniciar`: `INICIAR` responde `ARRIBA` automáticamente y `FIN` encola `LISTO`. Sin `--iniciar`: pide ENTER para simular `ARRIBA`. |
 | `--sin-enviar` | No hace POST al backend. Muestra el payload por pantalla. |
 | `--pasos N` | Número de pasos de rotación por ciclo (default: 8). |
 | `--conservar-capturas` | No borra los JPG del ciclo tras el POST. Útil para depuración. |
@@ -88,6 +123,7 @@ python ciclo_serial.py --sin-serial --sin-enviar --pasos 4
 
 - Comunicación serial con la ESP32 física.
 - `ser.reset_input_buffer()` sobre un puerto real.
+- Señales `INICIAR` y `LISTO` con la ESP32 real.
 - Captura con las cámaras Logitech C920/C920e.
 - `_leer_cuadro_fresco` / `CUADROS_DESCARTADOS` con V4L2 real.
 - `CAP_PROP_BUFFERSIZE = 1` (depende del backend de OpenCV).
