@@ -1,9 +1,20 @@
 # Configuracion local de la Raspberry Pi
 # Cambiar IP_BACKEND cuando cambie la IP de la notebook (verificar con ipconfig)
 
-IP_BACKEND     = "localhost"
+IP_BACKEND     = "192.168.126.176"
 PUERTO_BACKEND = 5000
 URL_BACKEND    = f"http://{IP_BACKEND}:{PUERTO_BACKEND}"
+
+# ─── Override de máquina ──────────────────────────────────────────────────────
+# Si existe raspberry/config_local.py, sus valores reemplazan los de arriba.
+# No versionar config_local.py: está en .gitignore.
+# Ejemplo de config_local.py:
+#   IP_BACKEND = "localhost"
+try:
+    from config_local import *
+    URL_BACKEND = f"http://{IP_BACKEND}:{PUERTO_BACKEND}"
+except ImportError:
+    pass
 
 # ─── Cámaras ─────────────────────────────────────────────────────────────────
 # Rutas by-id: estables entre reinicios aunque cambien los índices /dev/videoN.
