@@ -96,6 +96,47 @@ def _obtener_datos_pieza(nombre):
     sys.exit(1)
 
 
+def _consultar_pieza_por_ciclo(nombre_anterior, pieza_anterior):
+    """
+    Consulta /pieza_activa justo después de ARRIBA, en cada ciclo.
+    Si el backend no responde usa la última pieza conocida.
+    Si la pieza cambió, consulta sus datos y lo avisa.
+    Devuelve (nombre, pieza_dict).
+    """
+    try:
+        resp = requests.get(config.URL_BACKEND + "/pieza_activa", timeout=3)
+        resp.raise_for_status()
+        nombre = resp.json().get("pieza")
+    except requests.exceptions.RequestException as e:
+        print("[AVISO] No se pudo consultar /pieza_activa: {}. "
+              "Usando última pieza conocida: '{}'.".format(e, nombre_anterior))
+        return nombre_anterior, pieza_anterior
+
+    if not nombre:
+        print("[AVISO] No hay pieza activa en el backend. "
+              "Usando última conocida: '{}'.".format(nombre_anterior))
+        return nombre_anterior, pieza_anterior
+
+    if nombre == nombre_anterior:
+        return nombre, pieza_anterior
+
+    # La pieza cambió: buscar los nuevos datos
+    print("[AVISO] Pieza cambió: '{}' → '{}'.".format(nombre_anterior, nombre))
+    try:
+        resp2 = requests.get(config.URL_BACKEND + "/piezas", timeout=3)
+        resp2.raise_for_status()
+        for p in resp2.json():
+            if p.get("nombre") == nombre:
+                return nombre, p
+        print("[AVISO] No se encontró '{}' en /piezas. "
+              "Usando última pieza conocida.".format(nombre))
+        return nombre_anterior, pieza_anterior
+    except requests.exceptions.RequestException as e:
+        print("[AVISO] No se pudo consultar /piezas: {}. "
+              "Usando última pieza conocida.".format(e))
+        return nombre_anterior, pieza_anterior
+
+
 def _enviar_con_reintentos(payload):
     """
     Intenta POST /inspeccion hasta REINTENTOS_POST veces.
@@ -135,23 +176,30 @@ def _enviar_con_reintentos(payload):
 
 # ── Cámaras ───────────────────────────────────────────────────────────────────
 
-def _configurar_v4l2(device, foco, exposicion):
+def _configurar_v4l2(device, label, foco, exposicion):
     """
-    Aplica ajustes de cámara vía v4l2-ctl.
-    Foco manual, exposición manual y balance de blancos fijo.
-    Los ajustes se pierden al desconectar la cámara, por eso se aplican al arrancar.
-    check=False porque v4l2-ctl puede no estar disponible (el script sigue igual).
+    Aplica ajustes de cámara vía v4l2-ctl: foco manual, exposición manual
+    y balance de blancos fijo. Los ajustes se pierden al desconectar la cámara.
+    Si v4l2-ctl no está instalado, avisa y continúa (el ciclo sigue con los
+    ajustes que tenga la cámara).
     """
-    subprocess.run([
-        "v4l2-ctl", "-d", device,
-        "--set-ctrl=focus_automatic_continuous=0",
-        "--set-ctrl=focus_absolute={}".format(foco),
-        "--set-ctrl=auto_exposure=1",
-        "--set-ctrl=exposure_dynamic_framerate=0",
-        "--set-ctrl=exposure_time_absolute={}".format(exposicion),
-        "--set-ctrl=white_balance_automatic=0",
-        "--set-ctrl=white_balance_temperature=4600",
-    ], check=False, capture_output=True)
+    try:
+        resultado = subprocess.run([
+            "v4l2-ctl", "-d", device,
+            "--set-ctrl=focus_automatic_continuous=0",
+            "--set-ctrl=focus_absolute={}".format(foco),
+            "--set-ctrl=auto_exposure=1",
+            "--set-ctrl=exposure_dynamic_framerate=0",
+            "--set-ctrl=exposure_time_absolute={}".format(exposicion),
+            "--set-ctrl=white_balance_automatic=0",
+            "--set-ctrl=white_balance_temperature=4600",
+        ], check=False, capture_output=True)
+        if resultado.returncode != 0:
+            print("[AVISO] v4l2-ctl falló para cámara {} (código {}). "
+                  "Continuando con ajustes de fábrica.".format(label, resultado.returncode))
+    except FileNotFoundError:
+        print("[AVISO] v4l2-ctl no está instalado. "
+              "Los ajustes de foco/exposición no se aplicaron.")
 
 
 def _abrir_camara(device, label):
@@ -162,6 +210,12 @@ def _abrir_camara(device, label):
     cam = cv2.VideoCapture(device, cv2.CAP_V4L2)
     if not cam.isOpened():
         raise Exception("No se pudo abrir la cámara {} ({}).".format(label, device))
+    # Limitar el buffer interno a 1 cuadro para reducir la latencia entre el
+    # momento de captura y el frame devuelto. No todos los backends lo soportan.
+    try:
+        cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    except Exception:
+        pass
     cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
     cam.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT,  720)
@@ -171,21 +225,36 @@ def _abrir_camara(device, label):
     return cam
 
 
+def _leer_cuadro_fresco(cam, descartar=None):
+    """
+    Vacía el buffer de la cámara descartando `descartar` cuadros con grab()
+    (rápido: decodifica solo el próximo en la cola, no el frame completo)
+    y hace read() para obtener uno fresco. Reduce la diferencia entre el
+    momento de disparo y el contenido real del frame capturado.
+    """
+    if descartar is None:
+        descartar = config.CUADROS_DESCARTADOS
+    for _ in range(descartar):
+        cam.grab()
+    return cam.read()
+
+
 def _capturar_par(cam_sup, cam_lat, angulo):
     """
-    Captura un frame de cada cámara y los guarda con nombre por ángulo y timestamp.
+    Captura un frame fresco de cada cámara y los guarda con nombre por ángulo y timestamp.
+    Usa _leer_cuadro_fresco para descartar cuadros viejos del buffer.
     Devuelve {"superior": ruta, "lateral": ruta}.
     """
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     ruta_sup = os.path.join(CARPETA_CAPTURAS, "superior_ang{}_{}.jpg".format(angulo, ts))
     ruta_lat = os.path.join(CARPETA_CAPTURAS, "lateral_ang{}_{}.jpg".format(angulo, ts))
 
-    ret, frame = cam_sup.read()
+    ret, frame = _leer_cuadro_fresco(cam_sup)
     if not ret:
         raise Exception("Error al capturar cámara superior en {}°".format(angulo))
     cv2.imwrite(ruta_sup, frame)
 
-    ret, frame = cam_lat.read()
+    ret, frame = _leer_cuadro_fresco(cam_lat)
     if not ret:
         raise Exception("Error al capturar cámara lateral en {}°".format(angulo))
     cv2.imwrite(ruta_lat, frame)
@@ -205,6 +274,30 @@ def _imagen_a_base64(ruta):
     if not ok:
         return None
     return base64.b64encode(buf.tobytes()).decode("utf-8")
+
+
+def _limpiar_capturas(pasos, captura_ref):
+    """
+    Borra todos los JPG del ciclo que no sean la captura representativa.
+    Los errores de borrado se ignoran silenciosamente (el archivo puede
+    no existir si la captura falló).
+    """
+    rutas_conservar = set()
+    if captura_ref:
+        if captura_ref.get("superior"):
+            rutas_conservar.add(captura_ref["superior"])
+        if captura_ref.get("lateral"):
+            rutas_conservar.add(captura_ref["lateral"])
+
+    for p in pasos:
+        if p["capturas"] is None:
+            continue
+        for ruta in p["capturas"].values():
+            if ruta and ruta not in rutas_conservar:
+                try:
+                    os.remove(ruta)
+                except OSError:
+                    pass
 
 
 # ── Serial ────────────────────────────────────────────────────────────────────
@@ -258,6 +351,10 @@ class _SerialSimulado:
         elif cmd.startswith("FIN"):
             print("[SIMULADO] ESP32 recibió: {}".format(cmd))
             self._esperando_arriba = True  # listo para el próximo ciclo
+
+    def reset_input_buffer(self):
+        """No-op: el simulador no tiene buffer real que limpiar."""
+        pass
 
     def close(self):
         print("[SIMULADO] Serial cerrado.")
@@ -362,37 +459,55 @@ def _captura_mas_cercana_a_mediana(pasos, mediana_diametro):
 
 # ── Ciclo de inspección ───────────────────────────────────────────────────────
 
-def _ejecutar_ciclo(ser, cam_sup, cam_lat, procesador, pieza, nombre_pieza,
-                    n_pasos, sin_enviar):
+def _ejecutar_ciclo(ser, cam_sup, cam_lat, procesador, nombre_pieza, pieza,
+                    n_pasos, sin_enviar, conservar_capturas):
     """
-    Un ciclo completo: esperar ARRIBA → 8 pasos → mediana → evaluar → POST → FIN.
-    Devuelve True si completó normalmente, False si se abortó sin POST.
+    Un ciclo completo: esperar ARRIBA → consultar pieza → n pasos → mediana
+    → evaluar → POST → limpiar capturas → FIN.
+
+    Los ciclos inválidos (< 4 mediciones o sin referencias evaluables) siempre
+    generan un POST con resultado RECHAZADA: el operario puede ver la inspección
+    fallida en el dashboard.
+
+    Devuelve (completó, nombre_pieza_actual, pieza_actual).
+    completó = False solo cuando hay un error de comunicación serial irrecuperable.
     """
+    # Limpiar buffer de entrada al empezar cada ciclo para descartar
+    # cualquier basura acumulada entre ciclos.
+    ser.reset_input_buffer()
+
     # ── Paso 1: esperar ARRIBA ─────────────────────────────────────────────────
     print("\nEsperando ARRIBA de la ESP32 (timeout {} s)...".format(
         config.TIMEOUT_ARRIBA_SEG))
     if not _esperar_arriba(ser, config.TIMEOUT_ARRIBA_SEG):
         print("[AVISO] No llegó ARRIBA en {} s. Volviendo a esperar.".format(
             config.TIMEOUT_ARRIBA_SEG))
-        return False
+        return False, nombre_pieza, pieza
 
-    print("Elevador arriba. Iniciando ciclo ({} pasos)...".format(n_pasos))
+    # ── Actualizar pieza activa en cada ciclo ──────────────────────────────────
+    # Si cambió en el dashboard entre dos ciclos, se toma el nuevo valor.
+    nombre_pieza, pieza = _consultar_pieza_por_ciclo(nombre_pieza, pieza)
+
+    print("Pieza: {}  |  Iniciando ciclo ({} pasos)...".format(nombre_pieza, n_pasos))
     angulo_paso = 360 // n_pasos
     pasos       = []
 
     # ── Paso 2: n_pasos giros + captura ───────────────────────────────────────
     for n in range(n_pasos):
-        angulo = n * angulo_paso
+        # El ángulo corresponde a la posición DESPUÉS del giro.
+        angulo = (n + 1) * angulo_paso
 
+        # Limpiar buffer antes de enviar PASO para no confundir respuestas viejas.
+        ser.reset_input_buffer()
         ser.write(b"PASO\n")
 
         estado, detalle = _esperar_paso_ok(ser)
         if estado == "ERROR":
             print("[ERROR ESP32] {}. Abortando ciclo.".format(detalle))
-            return False
+            return False, nombre_pieza, pieza
         if estado is None:
             print("[ERROR] Timeout esperando PASO_OK en paso {}. Abortando.".format(n + 1))
-            return False
+            return False, nombre_pieza, pieza
 
         # Esperar a que el plato se asiente antes de capturar
         time.sleep(PAUSA_ASENTAMIENTO_SEG)
@@ -401,7 +516,7 @@ def _ejecutar_ciclo(ser, cam_sup, cam_lat, procesador, pieza, nombre_pieza,
         try:
             capturas = _capturar_par(cam_sup, cam_lat, angulo)
         except Exception as e:
-            print("  [AVISO] Paso {:>2}/{} {}°  — falla de captura: {}".format(
+            print("  [AVISO] Paso {:>2}/{} {:>3}°  — falla de captura: {}".format(
                 n + 1, n_pasos, angulo, e))
             pasos.append({"capturas": None, "diametro": None, "largo": None, "alto": None})
             continue
@@ -427,44 +542,45 @@ def _ejecutar_ciclo(ser, cam_sup, cam_lat, procesador, pieza, nombre_pieza,
     vals_largo    = [p["largo"]    for p in pasos if p["largo"]    is not None]
     vals_alto     = [p["alto"]     for p in pasos if p["alto"]     is not None]
 
-    n_validos = len(vals_diametro)
-    if n_validos < 4:
-        print("[ERROR] Solo {} medición/es válida/s de diámetro (mínimo 4). "
-              "Ciclo inválido.".format(n_validos))
-        ser.write(b"FIN RECHAZADA\n")
-        return False
-
+    n_validos    = len(vals_diametro)
     med_diametro = statistics.median(vals_diametro) if vals_diametro else None
     med_largo    = statistics.median(vals_largo)    if vals_largo    else None
     med_alto     = statistics.median(vals_alto)     if vals_alto     else None
 
-    print("\nMedianas  —  OD: {}mm  largo: {}mm  alto: {}mm".format(
-        round(med_diametro, 1) if med_diametro is not None else "—",
-        round(med_largo,    1) if med_largo    is not None else "—",
-        round(med_alto,     1) if med_alto     is not None else "—",
-    ))
-
     # ── Paso 4: evaluar ───────────────────────────────────────────────────────
-    evaluaciones = {
-        "diámetro (ancho)": (med_diametro, pieza.get("ancho_ref"), pieza.get("ancho_tol")),
-        "largo":            (med_largo,    pieza.get("largo_ref"), pieza.get("largo_tol")),
-        "alto":             (med_alto,     pieza.get("alto_ref"),  pieza.get("alto_tol")),
-    }
-    resultados_evaluados, dim_no_evaluadas = _imprimir_tabla(evaluaciones)
+    if n_validos < 4:
+        print("[ERROR] Solo {} medición/es válida/s de diámetro (mínimo 4). "
+              "Ciclo inválido — se registra como RECHAZADA.".format(n_validos))
+        resultado = "RECHAZADA"
+        resultados_evaluados = []
+    else:
+        print("\nMedianas  —  OD: {}mm  largo: {}mm  alto: {}mm".format(
+            round(med_diametro, 1) if med_diametro is not None else "—",
+            round(med_largo,    1) if med_largo    is not None else "—",
+            round(med_alto,     1) if med_alto     is not None else "—",
+        ))
 
-    if dim_no_evaluadas:
-        print("No evaluadas: {}".format(", ".join(dim_no_evaluadas)))
+        evaluaciones = {
+            "diámetro (ancho)": (med_diametro, pieza.get("ancho_ref"), pieza.get("ancho_tol")),
+            "largo":            (med_largo,    pieza.get("largo_ref"), pieza.get("largo_tol")),
+            "alto":             (med_alto,     pieza.get("alto_ref"),  pieza.get("alto_tol")),
+        }
+        resultados_evaluados, dim_no_evaluadas = _imprimir_tabla(evaluaciones)
 
-    if not resultados_evaluados:
-        print("[ERROR] No se pudo evaluar ninguna dimensión. "
-              "Verificá la calibración y la iluminación.")
-        ser.write(b"FIN RECHAZADA\n")
-        return False
+        if dim_no_evaluadas:
+            print("No evaluadas: {}".format(", ".join(dim_no_evaluadas)))
 
-    resultado = "APROBADA" if all(resultados_evaluados) else "RECHAZADA"
+        if not resultados_evaluados:
+            print("[ERROR] No se pudo evaluar ninguna dimensión — "
+                  "verificá referencias de la pieza en el backend.")
+            resultado = "RECHAZADA"
+        else:
+            resultado = "APROBADA" if all(resultados_evaluados) else "RECHAZADA"
+
     print("\nResultado: {}".format(resultado))
 
     # ── Paso 5: armar payload ─────────────────────────────────────────────────
+    captura_ref = _captura_mas_cercana_a_mediana(pasos, med_diametro)
     payload = {
         "pieza":        nombre_pieza,
         "alto":         round(med_alto,     1) if med_alto     is not None else None,
@@ -473,8 +589,6 @@ def _ejecutar_ciclo(ser, cam_sup, cam_lat, procesador, pieza, nombre_pieza,
         "resultado":    resultado,
     }
 
-    # Captura representativa: el paso cuyo diámetro está más cerca de la mediana
-    captura_ref = _captura_mas_cercana_a_mediana(pasos, med_diametro)
     if captura_ref:
         b64_sup = _imagen_a_base64(captura_ref["superior"])
         if b64_sup:
@@ -484,6 +598,8 @@ def _ejecutar_ciclo(ser, cam_sup, cam_lat, procesador, pieza, nombre_pieza,
             payload["captura_lateral"] = b64_lat
 
     # ── Paso 6: enviar al backend ─────────────────────────────────────────────
+    # Siempre se envía, incluso para ciclos inválidos o no evaluables,
+    # para que el dashboard muestre la inspección fallida.
     if sin_enviar:
         payload_debug = {k: v for k, v in payload.items()
                          if k not in ("captura_superior", "captura_lateral")}
@@ -493,12 +609,16 @@ def _ejecutar_ciclo(ser, cam_sup, cam_lat, procesador, pieza, nombre_pieza,
     else:
         _enviar_con_reintentos(payload)
 
-    # ── Paso 7: notificar a la ESP32 (siempre, aunque el POST haya fallado) ───
+    # ── Paso 7: limpiar capturas del ciclo ────────────────────────────────────
+    if not conservar_capturas:
+        _limpiar_capturas(pasos, captura_ref)
+
+    # ── Paso 8: notificar a la ESP32 (siempre, aunque el POST haya fallado) ───
     cmd_fin = "FIN {}\n".format(resultado)
     ser.write(cmd_fin.encode("utf-8"))
     print("Enviado a ESP32: {}".format(cmd_fin.strip()))
 
-    return True
+    return True, nombre_pieza, pieza
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -519,6 +639,10 @@ def main():
         "--pasos", type=int, default=8,
         help="Número de pasos de rotación por ciclo (default: 8)",
     )
+    parser.add_argument(
+        "--conservar-capturas", action="store_true",
+        help="No borrar los JPG del ciclo después del POST (útil para depuración)",
+    )
     args = parser.parse_args()
 
     os.makedirs(CARPETA_CAPTURAS, exist_ok=True)
@@ -526,16 +650,16 @@ def main():
     # ── Verificar calibración antes de abrir cualquier hardware ───────────────
     _verificar_calibracion()
 
-    # ── Obtener pieza activa ──────────────────────────────────────────────────
-    # Se consulta una sola vez al arrancar. Si cambia durante el turno, reiniciar.
+    # ── Obtener pieza activa al arrancar ──────────────────────────────────────
+    # Se actualiza en cada ciclo después de ARRIBA.
     nombre_pieza = _obtener_pieza_activa()
     pieza        = _obtener_datos_pieza(nombre_pieza)
-    print("Pieza activa: {}".format(nombre_pieza))
+    print("Pieza activa al arrancar: {}".format(nombre_pieza))
 
     # ── Abrir cámaras ─────────────────────────────────────────────────────────
     print("Configurando cámaras...")
-    _configurar_v4l2(config.CAM_SUPERIOR, config.FOCO_SUPERIOR, config.EXPOSICION_SUPERIOR)
-    _configurar_v4l2(config.CAM_LATERAL,  config.FOCO_LATERAL,  config.EXPOSICION_LATERAL)
+    _configurar_v4l2(config.CAM_SUPERIOR, "superior", config.FOCO_SUPERIOR, config.EXPOSICION_SUPERIOR)
+    _configurar_v4l2(config.CAM_LATERAL,  "lateral",  config.FOCO_LATERAL,  config.EXPOSICION_LATERAL)
 
     cam_sup = _abrir_camara(config.CAM_SUPERIOR, "superior")
     cam_lat = _abrir_camara(config.CAM_LATERAL,  "lateral")
@@ -554,9 +678,10 @@ def main():
 
     try:
         while True:
-            _ejecutar_ciclo(
+            _, nombre_pieza, pieza = _ejecutar_ciclo(
                 ser, cam_sup, cam_lat, procesador,
-                pieza, nombre_pieza, args.pasos, args.sin_enviar,
+                nombre_pieza, pieza,
+                args.pasos, args.sin_enviar, args.conservar_capturas,
             )
     except KeyboardInterrupt:
         print("\nInterrumpido por el usuario.")
