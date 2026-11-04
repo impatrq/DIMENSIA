@@ -1,5 +1,13 @@
 CLAUDE.md
 
+# Override de IP del backend por máquina: no versionar.
+raspberry/config_local.py
+
+# Archivos del sistema y Python
+.DS_Store
+__pycache__/
+*.pyc
+
 # Datos generados localmente por la calibración de cámaras y los reportes.
 # Son específicos de cada instalación física (cámara, iluminación, distancia)
 # y no forman parte del código fuente del proyecto.
