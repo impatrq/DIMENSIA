@@ -99,11 +99,20 @@ python ciclo_serial.py --sin-serial --sin-enviar --pasos 4
 ## Simulador de la ESP32
 
 `esp32/simulador_protocolo.py` corre en MicroPython en la ESP32
-(sin pines, sin hardware). Implementa el mismo protocolo pero desde
-el lado de la ESP32, útil para probar el canal serial real sin el
-resto del hardware mecánico.
+(sin pines, sin hardware). Implementa el protocolo desde el lado
+ESP32, útil para probar el canal serial real sin el hardware mecánico.
 
-```
+**ARRIBA se repite cada 2 s hasta que llega el primer PASO.**
+La Raspberry ignora los duplicados: `reset_input_buffer()` al inicio
+de cada ciclo limpia la cola, y `_esperar_arriba()` descarta todo lo
+que no sea la cadena literal `ARRIBA`.
+
+Implementación no bloqueante: `select.poll` sobre `sys.stdin` con
+timeout de 100 ms. Si no llegan datos, comprueba si pasaron 2 s desde
+el último `ARRIBA` y lo reenvía. Una vez recibido el primer PASO, el
+resto del ciclo usa `readline()` bloqueante (la Raspberry responde rápido).
+
+```bash
 # Copiar a la ESP32 como main.py y conectar por Serial:
 python ciclo_serial.py   # (con --sin-serial desactivado)
 ```

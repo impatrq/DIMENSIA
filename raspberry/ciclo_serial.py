@@ -178,28 +178,43 @@ def _enviar_con_reintentos(payload):
 
 def _configurar_v4l2(device, label, foco, exposicion):
     """
-    Aplica ajustes de cámara vía v4l2-ctl: foco manual, exposición manual
-    y balance de blancos fijo. Los ajustes se pierden al desconectar la cámara.
-    Si v4l2-ctl no está instalado, avisa y continúa (el ciclo sigue con los
-    ajustes que tenga la cámara).
+    Aplica los ajustes de cámara vía v4l2-ctl en llamadas separadas,
+    respetando el orden de dependencia:
+      1. Deshabilitar autofocus → 2. Fijar foco manual
+      3. Modo exposición manual → 4. Deshabilitar framerate dinámico
+      5. Fijar tiempo de exposición
+      6. Deshabilitar AWB → 7. Fijar temperatura de color
+    Los controles 2, 5 y 7 fallan si se envían en el mismo comando que los
+    controles que los habilitan (el modo automático todavía está activo cuando
+    v4l2-ctl procesa la lista de una vez). Usarlos en llamadas separadas garantiza
+    que cada modo automático esté desactivado antes de fijar el valor manual.
+    Si v4l2-ctl no está instalado, avisa una vez y vuelve.
+    Si un control falla, avisa con el nombre y el stderr, y sigue con los demás.
     """
-    try:
-        resultado = subprocess.run([
-            "v4l2-ctl", "-d", device,
-            "--set-ctrl=focus_automatic_continuous=0",
-            "--set-ctrl=focus_absolute={}".format(foco),
-            "--set-ctrl=auto_exposure=1",
-            "--set-ctrl=exposure_dynamic_framerate=0",
-            "--set-ctrl=exposure_time_absolute={}".format(exposicion),
-            "--set-ctrl=white_balance_automatic=0",
-            "--set-ctrl=white_balance_temperature=4600",
-        ], check=False, capture_output=True)
-        if resultado.returncode != 0:
-            print("[AVISO] v4l2-ctl falló para cámara {} (código {}). "
-                  "Continuando con ajustes de fábrica.".format(label, resultado.returncode))
-    except FileNotFoundError:
-        print("[AVISO] v4l2-ctl no está instalado. "
-              "Los ajustes de foco/exposición no se aplicaron.")
+    controles = [
+        ("focus_automatic_continuous", "0"),
+        ("focus_absolute",             str(foco)),
+        ("auto_exposure",              "1"),
+        ("exposure_dynamic_framerate", "0"),
+        ("exposure_time_absolute",     str(exposicion)),
+        ("white_balance_automatic",    "0"),
+        ("white_balance_temperature",  "4600"),
+    ]
+    for nombre, valor in controles:
+        try:
+            res = subprocess.run(
+                ["v4l2-ctl", "-d", device,
+                 "--set-ctrl={}={}".format(nombre, valor)],
+                check=False, capture_output=True,
+            )
+            if res.returncode != 0:
+                stderr = res.stderr.decode("utf-8", errors="replace").strip()
+                print("[AVISO] v4l2-ctl cámara {}, control '{}' falló: {}".format(
+                    label, nombre, stderr or "(sin mensaje)"))
+        except FileNotFoundError:
+            print("[AVISO] v4l2-ctl no está instalado. "
+                  "Los ajustes de foco/exposición no se aplicaron.")
+            return  # si no está instalado, no tiene sentido seguir
 
 
 def _abrir_camara(device, label):
