@@ -69,6 +69,37 @@ puede no haber arrancado todavía y esperar sería un bloqueo innecesario.
 Indica que la máquina acepta otro `INICIAR`. Solo relevante en modo `--iniciar`.
 La ESP32 reenvía `ARRIBA` cada 2 s hasta recibir el primer `PASO`.
 
+## Configuración por máquina (`config_local.py`)
+
+`raspberry/config_local.py` no está versionado (`.gitignore`). Si existe,
+sus valores reemplazan a los de `config.py` **antes** de que se calcule
+`URL_BACKEND`, así que cualquier constante puede sobreescribirse sin tocar
+el archivo versionado.
+
+Valores típicos para ajustar por instalación:
+
+| Variable | Descripción | Ejemplo |
+|---|---|---|
+| `IP_BACKEND` | IP de la notebook donde corre el backend Flask | `"192.168.1.42"` |
+| `CAM_SUPERIOR` | Ruta de dispositivo de la cámara superior | `"/dev/video0"` |
+| `CAM_LATERAL` | Ruta de dispositivo de la cámara lateral | `"/dev/video2"` |
+| `FOCO_SUPERIOR` | Foco manual de la cámara superior (0–255) | `55` |
+| `FOCO_LATERAL` | Foco manual de la cámara lateral (0–255) | `50` |
+| `EXPOSICION_SUPERIOR` | Tiempo de exposición cámara superior | `100` |
+| `EXPOSICION_LATERAL` | Tiempo de exposición cámara lateral | `350` |
+| `PUERTO_SERIE` | Puerto serial de la ESP32 | `"/dev/ttyUSB0"` |
+| `TIMEOUT_ARRIBA_SEG` | Timeout esperando `ARRIBA` (s) | `90` |
+| `TIMEOUT_LISTO_SEG` | Timeout esperando `LISTO` tras FIN o aborto (s) | `120` |
+| `CUADROS_DESCARTADOS` | Cuadros descartados antes de cada captura | `6` |
+
+Ejemplo mínimo de `config_local.py`:
+
+```python
+IP_BACKEND        = "192.168.1.42"
+FOCO_SUPERIOR     = 55
+EXPOSICION_LATERAL = 350
+```
+
 ## Requisitos previos
 
 ```bash
