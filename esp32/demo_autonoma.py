@@ -8,7 +8,7 @@
 
 from machine import Pin
 import time
-from pines import PIN_BOTON
+from pines import PIN_BOTON, PIN_SERVO_ALIM, PIN_SERVO_PLATO
 from elevador_demo import ElevadorDemo, TIMEOUT_MS, F_MAX
 from servo_plato import ServoPlato
 
@@ -33,7 +33,9 @@ def _liberar_plato(plato):
     ServoPlato no tiene un método público para esto, así que se usa _pwm.
     """
     plato.detener()
+    Pin(PIN_SERVO_ALIM, Pin.OUT, value=0)    # primero cortar la alimentación del servo
     plato._pwm.deinit()
+    Pin(PIN_SERVO_PLATO, Pin.OUT, value=0)   # señal en 0, no flotante
 
 
 def ciclo(timeout_ms=TIMEOUT_MS, f_max=F_MAX):
