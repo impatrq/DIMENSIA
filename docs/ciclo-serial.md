@@ -51,6 +51,18 @@ Con `--debug-serial` todas las líneas se imprimen con prefijo `[ESP32] `.
 Por eso **FIN se envía antes del POST**: el POST con 3 reintentos y 1 s entre cada uno
 puede tardar hasta ~17 s, lo que consumiría más de la mitad del timeout de silencio.
 
+### Abortos en modo `--iniciar`
+
+Cuando un ciclo aborta por `ERROR` de la ESP32 o por timeout de `PASO_OK`,
+la ESP32 baja el elevador sola y envía `LISTO` al terminar.
+En modo `--iniciar`, el script espera ese `LISTO` **también en los abortos**
+(casos b y c del bucle de pasos) antes de volver al prompt de ENTER.
+Así se evita que un `INICIAR` llegue con la ESP32 todavía ocupada bajando,
+o que un `ERROR TIMEOUT_RPI` tardío contamine el ciclo siguiente.
+
+No se espera `LISTO` cuando falla `_esperar_arriba`: en ese caso la ESP32
+puede no haber arrancado todavía y esperar sería un bloqueo innecesario.
+
 ### Señal LISTO
 
 `LISTO` la emite la ESP32 cuando el elevador terminó de bajar después de recibir `FIN`.
