@@ -4,8 +4,9 @@
 # de bit-banging, con una rampa lineal de frecuencia al arrancar.
 # ENA no está conectada: el driver queda siempre habilitado y el motor mantiene
 # el torque al terminar. Por eso este módulo NO usa PIN_ENABLE.
-# Finales de carrera: microswitch con COM a GND y NO al pin, con PULL_UP,
-# activos en 0.
+# Finales de carrera y puerta: microswitch con COM a GND y NO al pin, con
+# PULL_UP, activos en 0 (puerta cerrada = switch apretado = 0).
+# Husillo T8 con avance de ~1,8 mm/vuelta: a 3200 Hz sube ~1,8 mm/s.
 # MicroPython
 
 from machine import Pin, PWM
@@ -16,23 +17,27 @@ from pines import (PIN_STEP, PIN_DIR,
 try:
     from pines import SENTIDO_SUBIR
 except ImportError:
-    # PROVISORIA: valor de DIR que hace subir el carro. Hay que confirmarlo
-    # con el husillo montado: si subir() hace bajar el carro, cambiar a 0.
-    # Una vez confirmado, moverlo a pines.py.
-    SENTIDO_SUBIR = 1
+    # PROVISORIA: valor de DIR que hace subir el carro (se define en pines.py).
+    SENTIDO_SUBIR = 0
+
+try:
+    from pines import PIN_PUERTA
+except ImportError:
+    PIN_PUERTA = 25
 
 # ─── Configuración ────────────────────────────────────────────────────────────
 
+USAR_PUERTA = False        # True cuando el microswitch de la puerta esté instalado
 PULSOS_POR_VUELTA = 3200   # 1/16 de micropaso (solo informativo)
 F_INICIAL = 500            # Hz, frecuencia de arranque
-F_MAX = 1500               # Hz, valor por defecto para las primeras pruebas con carga
-F_LIMITE = 3000            # Hz, tope de seguridad para f_max (rampa probada sin carga hasta 3000 Hz)
+F_MAX = 3200               # Hz, velocidad de trabajo (~1,8 mm/s)
+F_LIMITE = 5000            # Hz, tope de seguridad para f_max (rampa probada hasta 4800 Hz sin carga)
 T_RAMPA_MS = 2000          # ms para ir de F_INICIAL a f_max
 PERIODO_LECTURA_MS = 5     # cada cuánto se revisa el final de carrera
 PERIODO_RAMPA_MS = 50      # cada cuánto se actualiza la frecuencia de la rampa
 ESPERA_DIR_MS = 5          # espera entre setear DIR y el primer pulso
-TIMEOUT_MS = 45000         # timeout por tiempo, por defecto
-LIBERAR_MS = 3000          # ms que se espera a que se libere el final del sentido opuesto
+TIMEOUT_MS = 45000         # timeout por tiempo, por defecto (ajustar al recorrido)
+LIBERAR_MS = 3000          # ms que tiene el final del sentido opuesto para liberarse al arrancar
 DUTY_50 = 32768            # duty_u16 al 50 %
 
 
@@ -41,13 +46,17 @@ class ElevadorDemo:
     Sube y baja el carro hasta los finales de carrera usando PWM en STEP.
     El PWM se crea solo durante cada movimiento y se libera en parar(),
     así no queda ocupando un canal/timer LEDC mientras se usa el servo.
+    Si USAR_PUERTA es True, el carro solo se mueve con la puerta cerrada y
+    se detiene en el acto si se abre durante el movimiento.
     """
 
     def __init__(self):
         self._dir = Pin(PIN_DIR, Pin.OUT)
         self._fc_arriba = Pin(PIN_FIN_CARRERA_ARRIBA, Pin.IN, Pin.PULL_UP)
         self._fc_abajo  = Pin(PIN_FIN_CARRERA_ABAJO,  Pin.IN, Pin.PULL_UP)
+        self._puerta = Pin(PIN_PUERTA, Pin.IN, Pin.PULL_UP)
         self._pwm = None
+        Pin(PIN_STEP, Pin.OUT, value=0)
 
     def _confirmado(self, fc):
         """Dos lecturas seguidas en 0, separadas PERIODO_LECTURA_MS."""
@@ -59,23 +68,27 @@ class ElevadorDemo:
     def _mover(self, sentido, fc, fc_opuesto, f_max, timeout_ms):
         """
         Mueve el carro en el sentido indicado hasta que fc se active
-        (True) o venza timeout_ms (False). Si fc_opuesto está activo al
-        arrancar y no se libera en LIBERAR_MS, o se activa durante el
-        movimiento, para y devuelve False. Siempre termina en parar().
+        (True) o venza timeout_ms (False).
+        Si fc_opuesto está activo al arrancar, el carro está en ese extremo:
+        se arranca igual (alejándose de él) y el final debe liberarse dentro
+        de LIBERAR_MS; si no se libera, para y devuelve False. Si fc_opuesto
+        se activa durante el movimiento (ya liberado), para y devuelve False.
+        Con USAR_PUERTA, no arranca con la puerta abierta y para si se abre.
+        Siempre termina en parar().
         """
         if not 0 < f_max <= F_LIMITE:
             raise ValueError("f_max fuera de rango: {}".format(f_max))
+
+        # Con la puerta abierta no se mueve nada
+        if USAR_PUERTA and not self.puerta_cerrada():
+            return False
 
         # Si ya está en el final de carrera, no mover
         if self._confirmado(fc):
             return True
 
-        # Si el final opuesto está activo, esperar a que se libere
-        t_espera = time.ticks_ms()
-        while self._confirmado(fc_opuesto):
-            if time.ticks_diff(time.ticks_ms(), t_espera) >= LIBERAR_MS:
-                return False
-            time.sleep_ms(PERIODO_LECTURA_MS)
+        # Si el final opuesto está activo, estamos parados en ese extremo
+        opuesto_al_inicio = self._confirmado(fc_opuesto)
 
         try:
             self._pwm = PWM(Pin(PIN_STEP), freq=F_INICIAL, duty_u16=0)
@@ -90,7 +103,14 @@ class ElevadorDemo:
             self._pwm.duty_u16(DUTY_50)
 
             while True:
-                # Final de carrera: dos lecturas seguidas en 0
+                t = time.ticks_diff(time.ticks_ms(), t0)
+
+                # Seguridad: si se abre la puerta durante el movimiento, parar
+                if USAR_PUERTA and self._puerta.value() == 1:
+                    self._pwm.duty_u16(0)
+                    return False
+
+                # Final de carrera de destino: dos lecturas seguidas en 0
                 if fc.value() == 0:
                     lecturas_en_0 += 1
                     if lecturas_en_0 >= 2:
@@ -99,16 +119,22 @@ class ElevadorDemo:
                 else:
                     lecturas_en_0 = 0
 
-                # Final del sentido opuesto: dos lecturas seguidas en 0
+                # Final del sentido opuesto
                 if fc_opuesto.value() == 0:
-                    lecturas_opuesto += 1
-                    if lecturas_opuesto >= 2:
-                        self._pwm.duty_u16(0)
-                        return False
+                    if opuesto_al_inicio:
+                        # Todavía se está alejando del final: tiene LIBERAR_MS
+                        if t >= LIBERAR_MS:
+                            self._pwm.duty_u16(0)
+                            return False
+                    else:
+                        lecturas_opuesto += 1
+                        if lecturas_opuesto >= 2:
+                            self._pwm.duty_u16(0)
+                            return False
                 else:
+                    opuesto_al_inicio = False
                     lecturas_opuesto = 0
 
-                t = time.ticks_diff(time.ticks_ms(), t0)
                 if t >= timeout_ms:
                     self._pwm.duty_u16(0)
                     return False
@@ -131,12 +157,12 @@ class ElevadorDemo:
             self.parar()
 
     def subir(self, f_max=F_MAX, timeout_ms=TIMEOUT_MS):
-        """Sube hasta el final de carrera superior. True si llegó, False si timeout o final de ABAJO activo."""
+        """Sube hasta el final de carrera superior. True si llegó, False si timeout, final de ABAJO activo o puerta abierta."""
         return self._mover(SENTIDO_SUBIR, self._fc_arriba, self._fc_abajo,
                            f_max, timeout_ms)
 
     def bajar(self, f_max=F_MAX, timeout_ms=TIMEOUT_MS):
-        """Baja hasta el final de carrera inferior. True si llegó, False si timeout o final de ARRIBA activo."""
+        """Baja hasta el final de carrera inferior. True si llegó, False si timeout, final de ARRIBA activo o puerta abierta."""
         # Sentido contrario a SENTIDO_SUBIR (asume valores 0/1)
         return self._mover(1 - SENTIDO_SUBIR, self._fc_abajo, self._fc_arriba,
                            f_max, timeout_ms)
@@ -150,6 +176,13 @@ class ElevadorDemo:
             self._pwm.duty_u16(0)
             self._pwm.deinit()
             self._pwm = None
+        # Dejar STEP en 0 de forma activa: si queda flotando, el ruido del servo
+        # puede colarse como pulsos y mover el motor un poco.
+        Pin(PIN_STEP, Pin.OUT, value=0)
+
+    def puerta_cerrada(self):
+        """True si la puerta está cerrada (microswitch apretado)."""
+        return self._puerta.value() == 0
 
     def esta_arriba(self):
         """True si el final de carrera superior está activo."""
