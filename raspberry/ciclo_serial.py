@@ -342,26 +342,34 @@ class _SerialSimulado:
     Simula el lado ESP32 del protocolo dentro de Python.
     - Sin --iniciar: pide ENTER para simular ARRIBA al inicio de cada ciclo.
     - Con --iniciar: al recibir INICIAR responde ARRIBA sin pedir ENTER.
-    - Al recibir PASO:   responde PASO_OK.
+    - Al recibir PASO:   responde PASO_OK (o ERROR si simular_error_en_paso coincide).
     - Al recibir FIN:    encola LISTO (simula que el elevador bajó).
+
+    Parámetro interno de prueba:
+      simular_error_en_paso (int o None): si está seteado, cuando se recibe
+      ese PASO (contando desde 1) se responde ERROR TIMEOUT_RPI en lugar de
+      PASO_OK, y se encola LISTO automáticamente (la ESP32 baja sola ante error).
     """
 
-    def __init__(self):
-        self._pendiente        = None
-        self._esperando_arriba = True
-        self._post_listo       = False  # True: próxima llamada a readline devuelve LISTO
+    def __init__(self, simular_error_en_paso=None):
+        self._pendiente            = None
+        self._esperando_arriba     = True
+        self._post_listo           = False  # True: próxima llamada a readline devuelve LISTO
+        self._simular_error_en_paso = simular_error_en_paso
+        self._contador_pasos       = 0
 
     def readline(self):
-        # Respuesta pendiente tiene prioridad (ARRIBA tras INICIAR, PASO_OK)
+        # Respuesta pendiente tiene prioridad (ARRIBA tras INICIAR, PASO_OK, ERROR)
         if self._pendiente:
             resp            = self._pendiente
             self._pendiente = None
             time.sleep(0.05)
             return resp
-        # FIN fue enviado: entregar LISTO y preparar el próximo ciclo
+        # FIN fue enviado (o error simulado): entregar LISTO y preparar el próximo ciclo
         if self._post_listo:
             self._post_listo       = False
             self._esperando_arriba = True
+            self._contador_pasos   = 0
             time.sleep(0.05)
             return b"LISTO\n"
         # Sin INICIAR: pedir ENTER al operario para simular ARRIBA
@@ -379,8 +387,17 @@ class _SerialSimulado:
             self._pendiente        = b"ARRIBA\n"
             self._post_listo       = False
             self._esperando_arriba = False
+            self._contador_pasos   = 0
         elif cmd == "PASO":
-            self._pendiente = b"PASO_OK\n"
+            self._contador_pasos += 1
+            if (self._simular_error_en_paso is not None
+                    and self._contador_pasos == self._simular_error_en_paso):
+                print("[SIMULADO] Simulando ERROR en paso {}.".format(self._contador_pasos))
+                # La ESP32 real baja sola y luego manda LISTO
+                self._pendiente  = b"ERROR TIMEOUT_RPI\n"
+                self._post_listo = True
+            else:
+                self._pendiente = b"PASO_OK\n"
         elif cmd.startswith("FIN"):
             print("[SIMULADO] ESP32 recibió: {}".format(cmd))
             self._post_listo = True  # LISTO se entregará en el próximo readline
@@ -565,9 +582,17 @@ def _ejecutar_ciclo(ser, cam_sup, cam_lat, procesador, nombre_pieza, pieza,
         estado, detalle = _esperar_paso_ok(ser)
         if estado == "ERROR":
             print("[ERROR ESP32] {}. Abortando ciclo.".format(detalle))
+            if usar_iniciar:
+                print("Esperando LISTO de la ESP32 (el elevador puede estar bajando)...")
+                if not _esperar_listo(ser, config.TIMEOUT_LISTO_SEG):
+                    print("[AVISO] No llegó LISTO en {} s.".format(config.TIMEOUT_LISTO_SEG))
             return False, nombre_pieza, pieza
         if estado is None:
             print("[ERROR] Timeout esperando PASO_OK en paso {}. Abortando.".format(n + 1))
+            if usar_iniciar:
+                print("Esperando LISTO de la ESP32 (el elevador puede estar bajando)...")
+                if not _esperar_listo(ser, config.TIMEOUT_LISTO_SEG):
+                    print("[AVISO] No llegó LISTO en {} s.".format(config.TIMEOUT_LISTO_SEG))
             return False, nombre_pieza, pieza
 
         # Esperar a que el plato se asiente antes de capturar
