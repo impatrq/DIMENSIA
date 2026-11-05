@@ -2,44 +2,42 @@
 # Servo MG996R de rotación continua (360°, modificado sin potenciómetro).
 # A diferencia de un servo posicional, este NO tiene feedback de posición:
 # se controla por velocidad y tiempo, no por ángulo directo.
+# El servo se alimenta desde una fuente aparte a través de un TIP142, que se
+# enciende con el pin PIN_SERVO_ALIM (resistencia de 330 ohm a la base).
 # MicroPython
 
 from machine import Pin, PWM
 from time import sleep_ms
-from pines import PIN_SERVO_PLATO
+from pines import PIN_SERVO_PLATO, PIN_SERVO_ALIM
 
-# ─── Frecuencia PWM ───────────────────────────────────────────────────────────
+# --- Frecuencia PWM ----------------------------------------------------------
 
 FRECUENCIA_PWM = 50   # 50 Hz estándar para servos RC (periodo 20 ms)
 
-# ─── Pulsos en microsegundos — medidos con el servo real a 6 V sin carga ──────
+# --- Pulsos en microsegundos -------------------------------------------------
 
 PULSO_NEUTRO_US = 1500
-# Servo quieto (punto muerto). Medido: 1,5 ms → neutro real.
+# Servo quieto (punto muerto). Medido: 1,5 ms, no deriva en neutro.
 
-PULSO_HORARIO_US = 1400
-# PROVISIONAL: falta confirmar con el servo montado que 1400 µs gira en sentido
-# horario mirando el plato desde arriba. Si resulta antihorario, intercambiar
-# PULSO_HORARIO_US y PULSO_ANTIHORARIO_US.
+PULSO_HORARIO_US = 1300
+# Gira en sentido horario mirando el plato desde arriba.
+# Si resulta antihorario, intercambiar PULSO_HORARIO_US y PULSO_ANTIHORARIO_US.
 
-PULSO_ANTIHORARIO_US = 1600
-# Simétrico respecto del neutro (1500 + 100 µs). NO fue medido directamente.
+PULSO_ANTIHORARIO_US = 1700
+# Simétrico respecto del neutro (1500 + 200 us).
 
-TIEMPO_PASO_45_MS = 2300
-# Tiempo para avanzar 45° (un octavo de vuelta). Medido sin carga a 6 V.
-# REPETIR la medición con el plato y la pieza montados y el servo alimentado
-# por el buck de 6 V: la carga puede aumentar este valor.
+TIEMPO_PASO_45_MS = 1038
+# Tiempo para avanzar 45° (un octavo de vuelta). Calibrado el 5/11 con el
+# servo en la placa y 6 V (no mover la fuente): la vuelta de 8 pasos cierra con menos de 5° de desvío.
+# Si cambia la fuente o la carga, REPETIR la calibración.
 
 
 def _aplicar_pulso(pwm, pulso_us):
     """
-    Aplica un pulso en µs al objeto PWM.
+    Aplica un pulso en us al objeto PWM.
     duty_ns() está disponible desde MicroPython 1.20 en ESP32.
-    Si la build no lo soporta, descomentar la línea con duty_u16.
     """
     pwm.duty_ns(pulso_us * 1000)
-    # Alternativa si duty_ns no está disponible:
-    # pwm.duty_u16(int(pulso_us / 20000 * 65535))
 
 
 class ServoPlato:
@@ -50,9 +48,16 @@ class ServoPlato:
     """
 
     def __init__(self):
-        # Inicializar el PWM en el pin del servo
+        # Primero la señal en neutro, DESPUÉS la alimentación: si el servo se
+        # enciende con la señal flotando o en 0, gira solo un instante.
         self._pwm = PWM(Pin(PIN_SERVO_PLATO), freq=FRECUENCIA_PWM)
-        # Siempre arrancar con el servo detenido para no mover el plato
+        self.detener()
+        sleep_ms(50)
+        # Alimentar el servo a través del TIP142
+        self._alim = Pin(PIN_SERVO_ALIM, Pin.OUT)
+        self._alim.value(1)
+        sleep_ms(300)
+        # Dejar el servo detenido para no mover el plato
         self.detener()
 
     def detener(self):
@@ -62,8 +67,7 @@ class ServoPlato:
     def girar_tiempo(self, direccion="horario", tiempo_ms=500):
         """
         Gira el plato en la dirección indicada durante tiempo_ms milisegundos,
-        luego lo detiene. Es el método principal del ciclo de inspección:
-        se llama una vez por ángulo (0°, 45°, 90°... hasta 315°).
+        luego lo detiene. Se llama una vez por ángulo (0°, 45°, 90°... 315°).
         """
         if direccion == "horario":
             _aplicar_pulso(self._pwm, PULSO_HORARIO_US)
@@ -75,17 +79,14 @@ class ServoPlato:
 
     def girar_paso(self, direccion="horario"):
         """
-        Gira el plato exactamente un paso de 45° usando TIEMPO_PASO_45_MS.
-        Es el método que usa el ciclo de inspección en condiciones normales:
-        llama a girar_tiempo() con el tiempo medido en calibración.
+        Gira el plato un paso de 45° usando TIEMPO_PASO_45_MS.
+        Es el método que usa el ciclo de inspección en condiciones normales.
         """
         self.girar_tiempo(direccion=direccion, tiempo_ms=TIEMPO_PASO_45_MS)
 
     def calibrar_paso(self, tiempo_ms):
         """
         Herramienta de calibración manual: gira horario durante tiempo_ms
-        y se detiene. Llamar repetidamente ajustando tiempo_ms hasta que
-        el plato avance exactamente 45° cada vez.
-        El valor correcto se actualiza en TIEMPO_PASO_45_MS.
+        y se detiene. Se usa para ajustar TIEMPO_PASO_45_MS.
         """
         self.girar_tiempo(direccion="horario", tiempo_ms=tiempo_ms)

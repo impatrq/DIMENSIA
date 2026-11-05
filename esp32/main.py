@@ -1,122 +1,176 @@
-# Programa principal — ESP32 DIMENSIA
-# Orquesta el ciclo completo de inspección:
-# botón → elevador sube → 8 giros con captura → clasificación → elevador baja
+# main.py — arranque automático de la ESP32 — DIMENSIA
+# Corre solo al encender la ESP32. Espera órdenes por el USB (serial) y/o el
+# botón de PIN_BOTON, y ejecuta el ciclo: subir, 8 paradas del plato, bajar.
+#
+# Protocolo (una línea por mensaje, terminada en \n, a 115200 baud):
+#   ESP32 -> RPi:  LISTO            (arrancó o terminó un ciclo, espera orden)
+#                  ARRIBA           (el carro llegó arriba; se repite cada 2 s
+#                                    hasta que llega el primer PASO)
+#                  PASO_OK          (el plato giró 45° y se asentó)
+#                  ABAJO            (el carro llegó abajo; ciclo terminado)
+#                  ERROR <motivo>   (SUBIR, BAJAR, TIMEOUT_RPI, PASOS_EXCEDIDOS)
+#                  PARADO           (se recibió PARAR y no se estaba moviendo)
+#                  PONG / ESTADO ...(respuestas a PING / ESTADO)
+#                  Las líneas que empiezan con # son comentarios: ignorarlas.
+#   RPi -> ESP32:  INICIAR          (arranca un ciclo, igual que el botón)
+#                  PASO             (gira un paso; responde PASO_OK) x8
+#                  FIN APROBADA / FIN RECHAZADA (terminó de medir: baja el carro)
+#                  PARAR            (corta el plato y deja el carro donde está)
+#                  PING, ESTADO
+#
+# Limitación: mientras el carro se mueve (subir/bajar, hasta TIMEOUT_MS) la
+# ESP32 no lee el serial. Para parar en ese momento: cortar los 12 V del driver
+# (o sacar el fusible) o Ctrl+C. PARAR funciona entre pasos del plato.
+# Para volver al REPL y editar archivos: Ctrl+C (mpremote lo hace solo).
 # MicroPython
 
 import sys
-import json
+import time
+import select
 from machine import Pin
-from time import sleep_ms
-
-from elevador import Elevador
+import pines
+from elevador_demo import ElevadorDemo, TIMEOUT_MS, F_MAX
 from servo_plato import ServoPlato
-from servo_brazo import ServoBrazo
-from servo_paleta import ServoPaleta
-from comunicacion import Comunicacion
-from pines import PIN_BOTON
 
-# ─── Inicialización del hardware ──────────────────────────────────────────────
+# ─── Configuración ────────────────────────────────────────────────────────────
 
-boton    = Pin(PIN_BOTON, Pin.IN, Pin.PULL_UP)
-elevador = Elevador()
-plato    = ServoPlato()
-brazo    = ServoBrazo()
-paleta   = ServoPaleta()
-com      = Comunicacion()
+PARADAS = 8
+ASENTAMIENTO_MS = 1000     # espera después de cada paso del plato (antes de PASO_OK)
+ESPERA_ARRIBA_MS = 1000    # pausa al llegar arriba, antes de avisar ARRIBA
+ESPERA_CMD_MS = 30000      # si la RPi no manda nada en este tiempo (entre PASO y FIN): ERROR y baja
+ESPERA_PRIMER_PASO_MS = 60000  # idem, esperando el primer PASO
+REPETIR_ARRIBA_MS = 2000   # ARRIBA se repite cada tanto hasta que llega el primer PASO
+ANTIRREBOTE_MS = 50
 
-print("Sistema DIMENSIA listo. Esperando botón...")
-
-
-def leer_comando():
-    """
-    Espera una línea de texto por Serial (enviada por la Raspberry Pi) y la
-    parsea como JSON. Repite hasta recibir un JSON válido.
-    En MicroPython, sys.stdin.readline() lee desde el mismo UART0/USB
-    que usa print() para enviar — es el canal bidireccional de comunicación.
-    """
-    while True:
-        linea = sys.stdin.readline().strip()
-        if not linea:
-            continue
-        try:
-            return json.loads(linea)
-        except ValueError:
-            # Ignorar líneas que no sean JSON válido (puede haber basura al inicio)
-            continue
+_poll = select.poll()
+_poll.register(sys.stdin, select.POLLIN)
+_elev = ElevadorDemo()
+_boton = Pin(pines.PIN_BOTON, Pin.IN, Pin.PULL_UP)
 
 
-def ciclo_inspeccion():
-    """
-    Ejecuta un ciclo completo de inspección:
-    1. Subir el elevador
-    2. Notificar a la Raspberry Pi que la pieza está en posición
-    3. Ejecutar 8 giros del plato a pedido de la Raspberry Pi
-    4. Recibir el resultado final
-    5. Clasificar la pieza y bajar el elevador
-    """
+def enviar(mensaje):
+    print(mensaje)
 
-    # ── Paso 1: subir el elevador ──────────────────────────────────────────────
-    print("Subiendo elevador...")
-    llego = elevador.subir()
 
-    if not llego:
-        # El elevador no alcanzó el final de carrera superior antes del timeout
-        print(json.dumps({"evento": "error_elevador", "detalle": "timeout al subir"}))
-        return  # volver al loop principal, esperar el botón de nuevo
+def leer_linea(timeout_ms=0):
+    """Devuelve la línea recibida en mayúsculas, o None si no llegó nada."""
+    if _poll.poll(timeout_ms):
+        linea = sys.stdin.readline()
+        # Descartar caracteres raros (basura al abrir el puerto, \r, etc.)
+        linea = "".join(c for c in linea if " " <= c <= "~").strip().upper()
+        if linea:
+            return linea
+    return None
 
-    # ── Paso 2: notificar que la pieza está en posición de medición ───────────
-    print(json.dumps({"evento": "listo_para_medir"}))
 
-    # ── Paso 3: loop de 8 giros comandados por la Raspberry Pi ───────────────
-    # La Raspi manda {"comando": "girar"} una vez por captura.
-    # El tiempo de giro está definido en TIEMPO_PASO_45_MS dentro de servo_plato.py:
-    # es la fuente única de verdad para ese parámetro, no raspberry/main.py.
-    # Si el comando trae "tiempo_ms", se ignora — la ESP32 decide el tiempo de giro.
+def apagar_servo():
+    """Corta la alimentación del servo (base del TIP142 en 0)."""
+    Pin(pines.PIN_SERVO_ALIM, Pin.OUT, value=0)
 
-    # Pausa después del giro y antes de confirmar, para que el plato se asiente
-    # y las cámaras no capturen mientras aún hay vibración.
-    # PROVISIONAL: ajustar con la cámara real conectada.
-    PAUSA_ASENTAMIENTO_MS = 1000
 
-    for _ in range(8):
-        cmd = leer_comando()
+def liberar_plato(plato):
+    plato.detener()
+    apagar_servo()                       # primero cortar la alimentación del servo
+    plato._pwm.deinit()
+    Pin(pines.PIN_SERVO_PLATO, Pin.OUT, value=0)   # señal en 0, no flotante
 
-        if cmd.get("comando") == "girar":
-            plato.girar_paso("horario")
-            sleep_ms(PAUSA_ASENTAMIENTO_MS)
-            print(json.dumps({"evento": "giro_completado"}))
+
+def boton_apretado():
+    if _boton.value() != 0:
+        return False
+    t0 = time.ticks_ms()
+    while time.ticks_diff(time.ticks_ms(), t0) < ANTIRREBOTE_MS:
+        if _boton.value() != 0:
+            return False
+        time.sleep_ms(1)
+    while _boton.value() == 0:      # esperar a que suelte
+        time.sleep_ms(10)
+    return True
+
+
+def ciclo():
+    plato = None
+    try:
+        if not _elev.subir(f_max=F_MAX, timeout_ms=TIMEOUT_MS):
+            enviar("ERROR SUBIR")
+            return
+        time.sleep_ms(ESPERA_ARRIBA_MS)
+        enviar("ARRIBA")
+
+        plato = ServoPlato()
+        pasos = 0
+        t_espera = time.ticks_ms()
+        t_arriba = t_espera
+        while True:
+            cmd = leer_linea(200)
+            ahora = time.ticks_ms()
+            if cmd is None:
+                if pasos == 0 and time.ticks_diff(ahora, t_arriba) >= REPETIR_ARRIBA_MS:
+                    enviar("ARRIBA")
+                    t_arriba = ahora
+                limite = ESPERA_PRIMER_PASO_MS if pasos == 0 else ESPERA_CMD_MS
+                if time.ticks_diff(ahora, t_espera) >= limite:
+                    enviar("ERROR TIMEOUT_RPI")
+                    break
+                continue
+            t_espera = ahora
+            if cmd == "PASO":
+                if pasos >= PARADAS:
+                    enviar("ERROR PASOS_EXCEDIDOS")
+                    continue
+                plato.girar_paso("horario")
+                time.sleep_ms(ASENTAMIENTO_MS)
+                pasos += 1
+                enviar("PASO_OK")
+            elif cmd.startswith("FIN"):
+                enviar("# " + cmd)
+                break
+            elif cmd == "PARAR":
+                liberar_plato(plato)
+                plato = None
+                enviar("PARADO")
+                return          # el carro queda arriba
+            elif cmd == "PING":
+                enviar("PONG")
+            else:
+                enviar("# COMANDO_DESCONOCIDO " + cmd)
+
+        liberar_plato(plato)
+        plato = None
+        time.sleep_ms(1000)
+        if _elev.bajar(f_max=F_MAX, timeout_ms=TIMEOUT_MS):
+            enviar("ABAJO")
         else:
-            # Comando inesperado — ignorar y seguir esperando
-            continue
+            enviar("ERROR BAJAR")
+    finally:
+        if plato is not None:
+            liberar_plato(plato)
+        _elev.parar()
 
-    # ── Paso 4: esperar el resultado de la clasificación ─────────────────────
-    # La Raspberry Pi manda {"resultado": "APROBADA"} o {"resultado": "RECHAZADA"}
-    # después de procesar todas las capturas.
+
+def main():
+    apagar_servo()
+    enviar("LISTO")
     while True:
-        cmd = leer_comando()
-        resultado = cmd.get("resultado")
-        if resultado in ("APROBADA", "RECHAZADA"):
-            break
-        # Si llega cualquier otra cosa, seguir esperando
+        cmd = leer_linea(20)
+        if cmd == "INICIAR" or boton_apretado():
+            ciclo()
+            enviar("LISTO")
+        elif cmd == "PING":
+            enviar("PONG")
+        elif cmd == "ESTADO":
+            enviar("ESTADO arriba={} abajo={} puerta_cerrada={}".format(
+                int(_elev.esta_arriba()), int(_elev.esta_abajo()),
+                int(_elev.puerta_cerrada())))
+        elif cmd == "PARAR":
+            enviar("PARADO")
+        elif cmd is not None:
+            enviar("# COMANDO_DESCONOCIDO " + cmd)
 
-    # ── Paso 5: clasificar la pieza y bajar el elevador ──────────────────────
-    # Primero inclinar la paleta hacia la rama correcta, después empujar la pieza.
-    paleta.posicionar(resultado)
-    sleep_ms(300)   # dar tiempo a la paleta para llegar a la posición
-    brazo.empujar()
 
-    elevador.bajar()
-    print(json.dumps({"evento": "ciclo_completado", "resultado": resultado}))
-
-
-# ─── Loop principal ───────────────────────────────────────────────────────────
-
-while True:
-    # Esperar que el operario presione el botón de inicio.
-    # El pin lee LOW cuando el botón está presionado (pull-up activo en HIGH).
-    if boton.value() == 0:
-        sleep_ms(50)   # anti-rebote: confirmar que sigue presionado
-        if boton.value() == 0:
-            ciclo_inspeccion()
-
-    sleep_ms(20)   # pequeña pausa para no saturar el CPU en el loop de espera
+try:
+    main()
+except KeyboardInterrupt:
+    _elev.parar()
+    apagar_servo()
+    print("# main.py detenido (Ctrl+C)")
