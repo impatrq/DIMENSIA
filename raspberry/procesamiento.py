@@ -7,7 +7,8 @@ import numpy as np
 import json
 import os
 
-from segmentacion import detectar_contorno_pieza
+import config
+from segmentacion import detectar_contorno_pieza, detectar_contorno_lateral, detectar_circulo_superior
 
 RUTA_CALIBRACION_CAMARAS = os.path.join(os.path.dirname(__file__), "calibracion_camaras.json")
 CARPETA_CAPTURAS          = os.path.join(os.path.dirname(__file__), "capturas")
@@ -31,6 +32,19 @@ class ProcesadorImagenes:
 
         self.px_mm_superior = cal["px_por_mm_superior"]
         self.px_mm_lateral  = cal["px_por_mm_lateral"]
+
+        # Cargar fondos de referencia si existen (no versionados, en config.py)
+        if os.path.exists(config.FONDO_SUPERIOR):
+            self._fondo_superior = cv2.imread(config.FONDO_SUPERIOR)
+            print("Fondo superior cargado: {}".format(config.FONDO_SUPERIOR))
+        else:
+            self._fondo_superior = None
+
+        if os.path.exists(config.FONDO_LATERAL):
+            self._fondo_lateral = cv2.imread(config.FONDO_LATERAL)
+            print("Fondo lateral cargado: {}".format(config.FONDO_LATERAL))
+        else:
+            self._fondo_lateral = None
 
     def _segmentar(self, imagen_grises):
         """
@@ -60,14 +74,34 @@ class ProcesadorImagenes:
     def procesar_superior(self, ruta_imagen):
         """
         Procesa la foto de la cámara superior (vista desde arriba).
-        Extrae el diámetro exterior usando el círculo mínimo que encierra la pieza.
-        Devuelve las medidas en píxeles y en mm.
+        Extrae el diámetro exterior del anillo del niple.
+
+        Estrategia principal: HoughCircles sobre CLAHE-saturación HSV
+        (el anillo oxidado tiene S~110 contra S~0 del plato negro).
+        Fallback: detectar_contorno_pieza en grises + minEnclosingCircle.
         """
         imagen = cv2.imread(ruta_imagen)
         if imagen is None:
             raise Exception("No se pudo cargar la imagen: {}".format(ruta_imagen))
 
-        # Convertir a grises y detectar el contorno con soporte para ambas polaridades
+        # Intentar HoughCircles (más robusto en imágenes muy oscuras como la caja real)
+        resultado = detectar_circulo_superior(
+            imagen,
+            radio_min=config.HOUGH_RADIO_MIN,
+            radio_max=config.HOUGH_RADIO_MAX,
+            fondo=self._fondo_superior,
+        )
+        if resultado is not None:
+            cx, cy, radio_px = resultado
+            diametro_px = radio_px * 2
+            print("HoughCircles superior: cx={} cy={} r={:.1f} d={:.1f}px".format(
+                cx, cy, radio_px, diametro_px))
+            return {
+                "diametro_exterior_mm": round(diametro_px / self.px_mm_superior, 1),
+                "diametro_exterior_px": round(diametro_px, 1),
+            }
+
+        # Fallback: Otsu en grises + contorno + minEnclosingCircle
         grises = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
         try:
             contorno, polaridad = detectar_contorno_pieza(grises)
@@ -78,53 +112,44 @@ class ProcesadorImagenes:
         if contorno is None:
             return {"diametro_exterior_mm": None, "diametro_exterior_px": None}
 
-        # minEnclosingCircle devuelve el círculo mínimo que contiene el contorno
-        # El radio * 2 = diámetro exterior de la pieza en la vista superior
         _, radio_px = cv2.minEnclosingCircle(contorno)
         diametro_px = radio_px * 2
-
-        diametro_mm = round(diametro_px / self.px_mm_superior, 1)
-
         return {
-            "diametro_exterior_mm": diametro_mm,
+            "diametro_exterior_mm": round(diametro_px / self.px_mm_superior, 1),
             "diametro_exterior_px": round(diametro_px, 1),
         }
 
     def procesar_lateral(self, ruta_imagen):
         """
         Procesa la foto de la cámara lateral (vista de costado).
-        Extrae el largo y el alto de la pieza usando el rectángulo que encierra el contorno.
-        El ancho del rectángulo = largo de la pieza.
-        El alto del rectángulo  = altura de la pieza.
-        Devuelve las medidas en píxeles y en mm.
+        Extrae el largo y el alto de la pieza usando el rectángulo envolvente.
+
+        Estrategia principal: detectar_contorno_lateral (saturación HSV en ROI).
+        Fallback interno en detectar_contorno_lateral: Otsu en grises.
         """
         imagen = cv2.imread(ruta_imagen)
         if imagen is None:
             raise Exception("No se pudo cargar la imagen: {}".format(ruta_imagen))
 
-        # Convertir a grises y detectar el contorno con soporte para ambas polaridades
-        grises = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
         try:
-            contorno, polaridad = detectar_contorno_pieza(grises)
-            print(polaridad)
+            contorno, descripcion = detectar_contorno_lateral(
+                imagen,
+                fondo=self._fondo_lateral,
+                roi=config.ROI_LATERAL,
+            )
+            print(descripcion)
         except Exception:
             contorno = None
 
         if contorno is None:
             return {"largo_mm": None, "largo_px": None, "alto_mm": None, "alto_px": None}
 
-        # boundingRect devuelve (x, y, ancho, alto) del rectángulo alineado con los ejes
-        # ancho del rectángulo → largo de la pieza en la vista lateral
-        # alto  del rectángulo → altura de la pieza en la vista lateral
         x, y, ancho_px, alto_px = cv2.boundingRect(contorno)
 
-        largo_mm = round(ancho_px / self.px_mm_lateral, 1)
-        alto_mm  = round(alto_px  / self.px_mm_lateral, 1)
-
         return {
-            "largo_mm": largo_mm,
+            "largo_mm": round(ancho_px / self.px_mm_lateral, 1),
             "largo_px": ancho_px,
-            "alto_mm":  alto_mm,
+            "alto_mm":  round(alto_px  / self.px_mm_lateral, 1),
             "alto_px":  alto_px,
         }
 
