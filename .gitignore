@@ -1,4 +1,5 @@
 CLAUDE.md
+raspberry/config_local.py
 
 # Datos generados localmente por la calibración de cámaras y los reportes.
 # Son específicos de cada instalación física (cámara, iluminación, distancia)
@@ -7,3 +8,15 @@ raspberry/capturas/
 raspberry/calibracion_camaras.json
 raspberry/reportes/*.pdf
 raspberry/reportes/*.csv
+
+# Imágenes de prueba y fondos de referencia — no versionar.
+raspberry/tests_imagenes/
+raspberry/fondo_superior.jpg
+raspberry/fondo_lateral.jpg
+
+# Archivos binarios y temporales
+*.pyc
+__pycache__/
+*.db
+.DS_Store
+ESP32_GENERIC-*.bin
