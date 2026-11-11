@@ -52,26 +52,27 @@ def _tomar_lock():
     Si ya hay otra instancia corriendo, imprime su PID y termina el proceso.
     El lock se libera automáticamente cuando el proceso termina (el kernel
     cierra el descriptor al salir, incluso ante kill o excepción no capturada).
+
+    Se abre con "a+" para no truncar el archivo antes de tener el lock.
+    Solo después de conseguir el lock se trunca y se escribe el PID propio,
+    así un tercer intento siempre lee el PID correcto del proceso dueño.
     """
     global _lock_fd
-    # Leer el PID existente ANTES de truncar el archivo con open("w").
-    pid_existente = ""
-    try:
-        with open(LOCK_PATH) as f:
-            pid_existente = f.read().strip()
-    except OSError:
-        pass
-
-    _lock_fd = open(LOCK_PATH, "w")
+    _lock_fd = open(LOCK_PATH, "a+")
     try:
         fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
+        # Leer el PID sin modificar el archivo (el proceso dueño lo tiene bloqueado)
+        _lock_fd.seek(0)
+        pid_existente = _lock_fd.read().strip()
         pid_info = "PID {}".format(pid_existente) if pid_existente else "PID desconocido"
         print("[ERROR] Ya hay una instancia de ciclo_serial.py corriendo ({}).".format(pid_info))
         print("        Para cerrarla: kill {}".format(
             pid_existente if pid_existente else "<PID>"))
         sys.exit(1)
-    # Escribir nuestro PID en el archivo para que otra instancia pueda leerlo
+    # Conseguimos el lock: truncar y escribir nuestro PID
+    _lock_fd.seek(0)
+    _lock_fd.truncate()
     _lock_fd.write(str(os.getpid()))
     _lock_fd.flush()
 
@@ -225,7 +226,7 @@ def _configurar_v4l2(device, label, foco, exposicion, ganancia=0):
       3. Modo exposición manual → 4. Deshabilitar framerate dinámico
       5. Fijar tiempo de exposición
       6. Deshabilitar AWB → 7. Fijar temperatura de color
-      8. Fijar ganancia (si ganancia > 0)
+      8. Fijar ganancia (siempre, incluso si es 0)
     Los controles 2, 5 y 7 fallan si se envían en el mismo comando que los
     controles que los habilitan (el modo automático todavía está activo cuando
     v4l2-ctl procesa la lista de una vez). Usarlos en llamadas separadas garantiza
@@ -242,8 +243,7 @@ def _configurar_v4l2(device, label, foco, exposicion, ganancia=0):
         ("white_balance_automatic",    "0"),
         ("white_balance_temperature",  "4600"),
     ]
-    if ganancia > 0:
-        controles.append(("gain", str(ganancia)))
+    controles.append(("gain", str(ganancia)))
     for nombre, valor in controles:
         try:
             res = subprocess.run(
