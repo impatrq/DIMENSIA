@@ -87,6 +87,8 @@ Valores típicos para ajustar por instalación:
 | `FOCO_LATERAL` | Foco manual de la cámara lateral (0–255) | `50` |
 | `EXPOSICION_SUPERIOR` | Tiempo de exposición cámara superior | `100` |
 | `EXPOSICION_LATERAL` | Tiempo de exposición cámara lateral | `350` |
+| `GANANCIA_SUPERIOR` | Ganancia de la cámara superior (0 = no aplicar) | `50` |
+| `GANANCIA_LATERAL` | Ganancia de la cámara lateral (0 = no aplicar) | `50` |
 | `PUERTO_SERIE` | Puerto serial de la ESP32 | `"/dev/ttyUSB0"` |
 | `TIMEOUT_ARRIBA_SEG` | Timeout esperando `ARRIBA` (s) | `90` |
 | `TIMEOUT_LISTO_SEG` | Timeout esperando `LISTO` tras FIN o aborto (s) | `120` |
@@ -99,6 +101,36 @@ IP_BACKEND        = "192.168.1.42"
 FOCO_SUPERIOR     = 55
 EXPOSICION_LATERAL = 350
 ```
+
+## Robustez del arranque
+
+### Instancia única (`fcntl.flock`)
+
+Al iniciar, `ciclo_serial.py` toma un lock exclusivo sobre `/tmp/ciclo_serial.lock`.
+Si ya hay otra instancia corriendo (por ejemplo, una sesión SSH que se cortó y dejó el
+proceso vivo), el nuevo intento imprime el PID del proceso que tiene el lock y sale:
+
+```
+[ERROR] Ya hay una instancia de ciclo_serial.py corriendo (PID 1234).
+        Para cerrarla: kill 1234
+```
+
+El lock se libera automáticamente cuando el proceso termina, incluso ante `kill` o
+`Ctrl+C`, porque el kernel cierra el descriptor al salir. No hace falta limpiarlo a mano.
+
+### Reintentos de apertura de cámara
+
+Si `cv2.VideoCapture` no puede abrir un dispositivo, `_abrir_camara` reintenta
+3 veces con 2 s de espera entre cada intento. Si todos fallan, imprime qué proceso
+tiene el dispositivo ocupado usando `fuser -v` sobre la ruta real del dispositivo
+(resolviendo el symlink by-id). Si `fuser` no está instalado, omite ese diagnóstico
+sin fallar.
+
+### Ganancia por cámara
+
+`GANANCIA_SUPERIOR` y `GANANCIA_LATERAL` (default `0`) controlan el control `gain`
+de v4l2. Con `0` no se envía el control. Ajustar en `config_local.py` si las imágenes
+son demasiado oscuras a pesar de haber ajustado la exposición.
 
 ## Requisitos previos
 

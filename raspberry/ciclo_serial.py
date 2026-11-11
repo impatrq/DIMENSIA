@@ -11,6 +11,7 @@
 
 import argparse
 import base64
+import fcntl
 import json
 import os
 import statistics
@@ -32,11 +33,47 @@ CAMPO_DIAMETRO = "ancho"
 CARPETA_CAPTURAS   = os.path.join(os.path.dirname(__file__), "capturas")
 CARPETA_PENDIENTES = os.path.join(CARPETA_CAPTURAS, "pendientes")
 RUTA_CALIBRACION   = os.path.join(os.path.dirname(__file__), "calibracion_camaras.json")
+LOCK_PATH          = "/tmp/ciclo_serial.lock"
 
 PAUSA_ASENTAMIENTO_SEG = 0.3   # tiempo entre PASO_OK y captura (el plato se asienta)
 REINTENTOS_POST        = 3     # intentos de POST antes de guardar en pendientes
+REINTENTOS_CAMARA      = 3     # aperturas extra antes de fallar definitivamente
+PAUSA_REINTENTO_CAMARA = 2     # segundos entre reintentos de apertura de cámara
 
 _DEBUG_SERIAL = False  # activado con --debug-serial: imprime cada línea recibida de la ESP32
+_lock_fd      = None   # descriptor del archivo de lock (mantenido abierto durante toda la sesión)
+
+
+# ── Instancia única ───────────────────────────────────────────────────────────
+
+def _tomar_lock():
+    """
+    Toma un lock exclusivo no bloqueante sobre LOCK_PATH con fcntl.flock.
+    Si ya hay otra instancia corriendo, imprime su PID y termina el proceso.
+    El lock se libera automáticamente cuando el proceso termina (el kernel
+    cierra el descriptor al salir, incluso ante kill o excepción no capturada).
+    """
+    global _lock_fd
+    # Leer el PID existente ANTES de truncar el archivo con open("w").
+    pid_existente = ""
+    try:
+        with open(LOCK_PATH) as f:
+            pid_existente = f.read().strip()
+    except OSError:
+        pass
+
+    _lock_fd = open(LOCK_PATH, "w")
+    try:
+        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        pid_info = "PID {}".format(pid_existente) if pid_existente else "PID desconocido"
+        print("[ERROR] Ya hay una instancia de ciclo_serial.py corriendo ({}).".format(pid_info))
+        print("        Para cerrarla: kill {}".format(
+            pid_existente if pid_existente else "<PID>"))
+        sys.exit(1)
+    # Escribir nuestro PID en el archivo para que otra instancia pueda leerlo
+    _lock_fd.write(str(os.getpid()))
+    _lock_fd.flush()
 
 
 # ── Verificación de calibración ───────────────────────────────────────────────
@@ -180,7 +217,7 @@ def _enviar_con_reintentos(payload):
 
 # ── Cámaras ───────────────────────────────────────────────────────────────────
 
-def _configurar_v4l2(device, label, foco, exposicion):
+def _configurar_v4l2(device, label, foco, exposicion, ganancia=0):
     """
     Aplica los ajustes de cámara vía v4l2-ctl en llamadas separadas,
     respetando el orden de dependencia:
@@ -188,6 +225,7 @@ def _configurar_v4l2(device, label, foco, exposicion):
       3. Modo exposición manual → 4. Deshabilitar framerate dinámico
       5. Fijar tiempo de exposición
       6. Deshabilitar AWB → 7. Fijar temperatura de color
+      8. Fijar ganancia (si ganancia > 0)
     Los controles 2, 5 y 7 fallan si se envían en el mismo comando que los
     controles que los habilitan (el modo automático todavía está activo cuando
     v4l2-ctl procesa la lista de una vez). Usarlos en llamadas separadas garantiza
@@ -204,6 +242,8 @@ def _configurar_v4l2(device, label, foco, exposicion):
         ("white_balance_automatic",    "0"),
         ("white_balance_temperature",  "4600"),
     ]
+    if ganancia > 0:
+        controles.append(("gain", str(ganancia)))
     for nombre, valor in controles:
         try:
             res = subprocess.run(
@@ -225,12 +265,31 @@ def _abrir_camara(device, label):
     """
     Abre la cámara por su ruta de dispositivo, fija MJPG 1280×720 y descarta
     los primeros 10 cuadros para que el autofocus y la exposición se estabilicen.
+
+    Si no se puede abrir, reintenta REINTENTOS_CAMARA veces con
+    PAUSA_REINTENTO_CAMARA s de espera entre cada intento. Si sigue fallando,
+    corre `fuser -v` sobre la ruta real del dispositivo (resolviendo el symlink
+    by-id) para identificar qué proceso tiene el dispositivo ocupado.
     """
-    cam = cv2.VideoCapture(device, cv2.CAP_V4L2)
-    if not cam.isOpened():
-        raise Exception("No se pudo abrir la cámara {} ({}).".format(label, device))
-    # Limitar el buffer interno a 1 cuadro para reducir la latencia entre el
-    # momento de captura y el frame devuelto. No todos los backends lo soportan.
+    for intento in range(1, REINTENTOS_CAMARA + 2):  # +2: 1 intento original + REINTENTOS_CAMARA
+        cam = cv2.VideoCapture(device, cv2.CAP_V4L2)
+        if cam.isOpened():
+            break
+        cam.release()
+        if intento <= REINTENTOS_CAMARA:
+            print("[AVISO] No se pudo abrir cámara {} (intento {}/{}). "
+                  "Reintentando en {} s...".format(
+                      label, intento, REINTENTOS_CAMARA + 1, PAUSA_REINTENTO_CAMARA))
+            time.sleep(PAUSA_REINTENTO_CAMARA)
+    else:
+        # Todos los intentos fallaron: intentar diagnosticar con fuser
+        detalle = _diagnostico_dispositivo(device)
+        raise Exception(
+            "No se pudo abrir la cámara {} ({}) tras {} intentos. {}".format(
+                label, device, REINTENTOS_CAMARA + 1, detalle))
+
+    # Limitar el buffer interno a 1 cuadro para reducir la latencia.
+    # No todos los backends lo soportan; el error se ignora silenciosamente.
     try:
         cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     except Exception:
@@ -242,6 +301,31 @@ def _abrir_camara(device, label):
     for _ in range(10):
         cam.read()
     return cam
+
+
+def _diagnostico_dispositivo(device):
+    """
+    Resuelve el symlink by-id a la ruta real y ejecuta fuser -v para ver
+    qué proceso tiene el dispositivo abierto. Devuelve un string descriptivo.
+    Si fuser no existe o falla, devuelve un aviso genérico sin lanzar excepción.
+    """
+    try:
+        ruta_real = os.path.realpath(device)
+    except Exception:
+        ruta_real = device
+    try:
+        res = subprocess.run(
+            ["fuser", "-v", ruta_real],
+            capture_output=True, timeout=5,
+        )
+        salida = (res.stdout + res.stderr).decode("utf-8", errors="replace").strip()
+        if salida:
+            return "Proceso que tiene el dispositivo ({}):\n{}".format(ruta_real, salida)
+        return "Ningún proceso detectado con fuser en {}.".format(ruta_real)
+    except FileNotFoundError:
+        return "fuser no está disponible para diagnosticar {}.".format(ruta_real)
+    except Exception as e:
+        return "No se pudo ejecutar fuser: {}.".format(e)
 
 
 def _leer_cuadro_fresco(cam, descartar=None):
@@ -755,6 +839,10 @@ def main():
     global _DEBUG_SERIAL
     _DEBUG_SERIAL = args.debug_serial
 
+    # Garantizar que solo haya una instancia corriendo a la vez.
+    # El lock se libera automáticamente cuando termina el proceso.
+    _tomar_lock()
+
     os.makedirs(CARPETA_CAPTURAS, exist_ok=True)
 
     # ── Verificar calibración antes de abrir cualquier hardware ───────────────
@@ -768,8 +856,10 @@ def main():
 
     # ── Abrir cámaras ─────────────────────────────────────────────────────────
     print("Configurando cámaras...")
-    _configurar_v4l2(config.CAM_SUPERIOR, "superior", config.FOCO_SUPERIOR, config.EXPOSICION_SUPERIOR)
-    _configurar_v4l2(config.CAM_LATERAL,  "lateral",  config.FOCO_LATERAL,  config.EXPOSICION_LATERAL)
+    _configurar_v4l2(config.CAM_SUPERIOR, "superior",
+                     config.FOCO_SUPERIOR, config.EXPOSICION_SUPERIOR, config.GANANCIA_SUPERIOR)
+    _configurar_v4l2(config.CAM_LATERAL,  "lateral",
+                     config.FOCO_LATERAL,  config.EXPOSICION_LATERAL,  config.GANANCIA_LATERAL)
 
     cam_sup = _abrir_camara(config.CAM_SUPERIOR, "superior")
     cam_lat = _abrir_camara(config.CAM_LATERAL,  "lateral")
