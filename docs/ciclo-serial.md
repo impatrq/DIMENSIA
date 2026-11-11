@@ -129,8 +129,10 @@ sin fallar.
 ### Ganancia por cámara
 
 `GANANCIA_SUPERIOR` y `GANANCIA_LATERAL` (default `0`) controlan el control `gain`
-de v4l2. Con `0` no se envía el control. Ajustar en `config_local.py` si las imágenes
-son demasiado oscuras a pesar de haber ajustado la exposición.
+de v4l2. El control **siempre se aplica**, incluso con valor `0`, para dejar la cámara
+en un estado conocido en cada arranque (las cámaras guardan los ajustes mientras siguen
+enchufadas). Ajustar en `config_local.py` si las imágenes son demasiado oscuras a pesar
+de haber ajustado la exposición.
 
 ## Requisitos previos
 
