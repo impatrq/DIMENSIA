@@ -17,6 +17,8 @@ FOCO_SUPERIOR        = 40
 FOCO_LATERAL         = 40
 EXPOSICION_SUPERIOR  = 80    # cámara A (C920); valor medido en banco
 EXPOSICION_LATERAL   = 400   # cámara B (C920e); valor medido en banco
+GANANCIA_SUPERIOR    = 0     # 0 = no aplicar; ajustar si la imagen es muy oscura
+GANANCIA_LATERAL     = 0     # 0 = no aplicar; ajustar si la imagen es muy oscura
 
 # ─── ESP32 ───────────────────────────────────────────────────────────────────
 # Puerto by-id de la ESP32 (CH340, ya identificado en la Raspberry Pi).
@@ -38,6 +40,7 @@ CUADROS_DESCARTADOS = 4
 # No versionar config_local.py: está en .gitignore.
 # Valores sobreescribibles: IP_BACKEND, CAM_SUPERIOR, CAM_LATERAL,
 #   FOCO_SUPERIOR, FOCO_LATERAL, EXPOSICION_SUPERIOR, EXPOSICION_LATERAL,
+#   GANANCIA_SUPERIOR, GANANCIA_LATERAL,
 #   PUERTO_SERIE, TIMEOUT_ARRIBA_SEG, TIMEOUT_LISTO_SEG, CUADROS_DESCARTADOS.
 # Ejemplo de config_local.py:
 #   IP_BACKEND       = "localhost"
