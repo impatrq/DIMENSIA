@@ -208,11 +208,35 @@ def obtener_capturas(inspeccion_id):
     return resultado
 
 # ── OBTENER INSPECCIONES ─────────────────────────────
-def obtener_inspecciones():
+# Filtros opcionales: tipo (pieza), estado (resultado), desde/hasta (AAAA-MM-DD, hasta inclusivo)
+def obtener_inspecciones(tipo=None, estado=None, desde=None, hasta=None, limite=50):
+    condiciones = []
+    params = []
+    if tipo:
+        condiciones.append('pieza = ?')
+        params.append(tipo)
+    if estado:
+        condiciones.append('resultado = ?')
+        params.append(estado)
+    if desde:
+        condiciones.append('substr(fecha, 1, 10) >= ?')
+        params.append(desde)
+    if hasta:
+        condiciones.append('substr(fecha, 1, 10) <= ?')
+        params.append(hasta)
+
+    sql = 'SELECT * FROM inspecciones'
+    if condiciones:
+        sql += ' WHERE ' + ' AND '.join(condiciones)
+    sql += ' ORDER BY fecha DESC'
+    if limite:
+        sql += ' LIMIT ?'
+        params.append(limite)
+
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute('SELECT * FROM inspecciones ORDER BY fecha DESC LIMIT 50')
+    c.execute(sql, params)
     filas = [dict(f) for f in c.fetchall()]
     conn.close()
     return filas

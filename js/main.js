@@ -530,26 +530,70 @@ function iniciarSesion() {
 }
 
 // ── EXPORTAR CSV ──────────────────────────────────────
-async function exportarCSV() {
+async function exportarCSV(filtros = {}) {
   try {
-    const res = await fetch(`${API}/exportar`);
-    if (!res.ok) { alert('No hay inspecciones para exportar.'); return; }
+    const params = new URLSearchParams();
+    Object.entries(filtros).forEach(([k, v]) => { if (v) params.set(k, v); });
+    const qs  = params.toString();
+    const res = await fetch(`${API}/exportar${qs ? '?' + qs : ''}`);
+    if (!res.ok) { alert('No hay inspecciones para exportar.'); return false; }
     const blob = await res.blob();
     const a    = document.createElement('a');
     a.href     = URL.createObjectURL(blob);
     a.download = 'inspecciones_dimensia.csv';
     a.click();
+    return true;
   } catch (err) {
     alert('Error al conectar con el backend para exportar.');
+    return false;
   }
+}
+
+// ── GENERAR REPORTE (Reportes) ────────────────────────────
+function rangoPeriodo(periodo) {
+  const hoy = new Date();
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  let desde = new Date(hoy);
+  if (periodo === 'Esta semana') desde.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7)); // lunes
+  else if (periodo === 'Este mes') desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  return { desde: iso(desde), hasta: iso(hoy) }; // "Turno actual" y "Hoy": el día de hoy
+}
+
+async function generarReporte(btn) {
+  const formato = document.getElementById('reporte-formato').value;
+  if (formato !== 'CSV') {
+    alert('PDF no disponible desde el dashboard: se genera con generador.py desde la Raspberry');
+    return;
+  }
+  const textoOriginal = btn.textContent;
+  btn.textContent = 'Generando...';
+  const ok = await exportarCSV({
+    ...rangoPeriodo(document.getElementById('reporte-periodo').value),
+    tipo: document.getElementById('reporte-tipo').value,
+  });
+  btn.textContent = ok ? 'Reporte generado ✓' : textoOriginal;
 }
 
 // ── CARGAR HISTORIAL DESDE EL BACKEND ───────────────────────
 let historialData = [];
 
+// Valores actuales de los filtros (estado = APROBADA/RECHAZADA, fechas = aaaa-mm-dd)
+function filtrosHistorial() {
+  const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  return {
+    tipo:   val('filtro-tipo'),
+    estado: val('filtro-estado'),
+    desde:  val('filtro-desde'),
+    hasta:  val('filtro-hasta'),
+  };
+}
+
 async function cargarHistorial() {
   try {
-    const res  = await fetch(`${API}/inspecciones`);
+    const params = new URLSearchParams();
+    Object.entries(filtrosHistorial()).forEach(([k, v]) => { if (v) params.set(k, v); });
+    const qs   = params.toString();
+    const res  = await fetch(`${API}/inspecciones${qs ? '?' + qs : ''}`);
     const data = await res.json();
     historialData = Array.isArray(data) ? data : [];
     filtrarHistorial();
@@ -563,10 +607,16 @@ function filtrarHistorial() {
   const input   = document.getElementById('filtro-serie');
   const busqueda = input ? input.value.trim().toLowerCase() : '';
 
-  const data = busqueda
-    ? historialData.filter(insp =>
-        (insp.numero_serie || '').toLowerCase().includes(busqueda))
-    : historialData;
+  // Los mismos filtros se aplican acá por si el backend ignora algún parámetro
+  const { tipo, estado, desde, hasta } = filtrosHistorial();
+  const data = historialData.filter(insp => {
+    const dia = (insp.fecha || '').substring(0, 10);
+    return (!busqueda || (insp.numero_serie || '').toLowerCase().includes(busqueda))
+      && (!tipo   || insp.pieza === tipo)
+      && (!estado || insp.resultado === estado)
+      && (!desde  || (dia && dia >= desde))
+      && (!hasta  || (dia && dia <= hasta));
+  });
 
   renderHistorial(data);
 }
