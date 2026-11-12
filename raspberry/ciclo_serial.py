@@ -261,6 +261,42 @@ def _configurar_v4l2(device, label, foco, exposicion, ganancia=0):
             return  # si no está instalado, no tiene sentido seguir
 
 
+def _verificar_controles_v4l2(device, label, foco_pedido, exposicion_pedida):
+    """
+    Lee focus_absolute y exposure_time_absolute con v4l2-ctl --get-ctrl.
+    Avisa si la exposición real difiere más del 10 % de la pedida (la cámara
+    puede limitarla según el framerate), o si el foco difiere del pedido.
+    """
+    try:
+        res = subprocess.run(
+            ["v4l2-ctl", "-d", device,
+             "--get-ctrl=focus_absolute,exposure_time_absolute"],
+            capture_output=True, check=False,
+        )
+    except FileNotFoundError:
+        return  # v4l2-ctl no instalado; _configurar_v4l2 ya avisó
+
+    for linea in res.stdout.decode("utf-8", errors="replace").splitlines():
+        linea = linea.strip()
+        if not linea or ":" not in linea:
+            continue
+        nombre, _, valor_str = linea.partition(":")
+        nombre = nombre.strip()
+        try:
+            valor_real = int(valor_str.strip())
+        except ValueError:
+            continue
+
+        if nombre == "exposure_time_absolute":
+            if exposicion_pedida and abs(valor_real - exposicion_pedida) / exposicion_pedida > 0.10:
+                print("[AVISO] cámara {}: exposición pedida {}, real {} "
+                      "(la cámara la limita)".format(label, exposicion_pedida, valor_real))
+        elif nombre == "focus_absolute":
+            if valor_real != foco_pedido:
+                print("[AVISO] cámara {}: foco pedido {}, real {} "
+                      "(la cámara lo ajustó)".format(label, foco_pedido, valor_real))
+
+
 def _abrir_camara(device, label):
     """
     Abre la cámara por su ruta de dispositivo, fija MJPG 1280×720 y descarta
@@ -855,6 +891,9 @@ def main():
     print("Pieza activa al arrancar: {}".format(nombre_pieza))
 
     # ── Abrir cámaras ─────────────────────────────────────────────────────────
+    # Se aplica v4l2-ctl antes de abrir (por si la cámara ya estaba encendida)
+    # y de nuevo después de abrir + descartar los primeros cuadros, porque
+    # OpenCV puede resetear foco y exposición al inicializar el dispositivo.
     print("Configurando cámaras...")
     _configurar_v4l2(config.CAM_SUPERIOR, "superior",
                      config.FOCO_SUPERIOR, config.EXPOSICION_SUPERIOR, config.GANANCIA_SUPERIOR)
@@ -862,7 +901,16 @@ def main():
                      config.FOCO_LATERAL,  config.EXPOSICION_LATERAL,  config.GANANCIA_LATERAL)
 
     cam_sup = _abrir_camara(config.CAM_SUPERIOR, "superior")
+    _configurar_v4l2(config.CAM_SUPERIOR, "superior",
+                     config.FOCO_SUPERIOR, config.EXPOSICION_SUPERIOR, config.GANANCIA_SUPERIOR)
+    _verificar_controles_v4l2(config.CAM_SUPERIOR, "superior",
+                              config.FOCO_SUPERIOR, config.EXPOSICION_SUPERIOR)
+
     cam_lat = _abrir_camara(config.CAM_LATERAL,  "lateral")
+    _configurar_v4l2(config.CAM_LATERAL,  "lateral",
+                     config.FOCO_LATERAL,  config.EXPOSICION_LATERAL,  config.GANANCIA_LATERAL)
+    _verificar_controles_v4l2(config.CAM_LATERAL, "lateral",
+                              config.FOCO_LATERAL, config.EXPOSICION_LATERAL)
     print("Cámaras listas (1280×720, MJPG).")
 
     # ── Abrir serial (o simulador) ────────────────────────────────────────────
