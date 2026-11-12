@@ -65,7 +65,10 @@ def detectar_contorno_lateral(imagen_color, fondo=None, roi=None):
     Detección mejorada para la cámara lateral.
 
     Prioridad de métodos:
-    1. Si hay fondo de referencia (imagen BGR): diferencia absoluta + Otsu.
+    1. Si hay fondo de referencia (imagen BGR): diferencia adaptativa + morfología
+       vertical + convex hull relleno + trim de sombra y columnas laterales.
+       Captura roscas tenues (similar tono que el fondo) y recorta la sombra de
+       contacto en la base.
     2. Sin fondo: umbral Otsu sobre el canal de saturación HSV dentro del ROI.
        El niple oxidado tiene S~105 frente a S~28 de la pared gris.
     3. Fallback: detectar_contorno_pieza en grises (método original).
@@ -82,10 +85,18 @@ def detectar_contorno_lateral(imagen_color, fondo=None, roi=None):
 
     # ── Método 1: fondo de referencia ─────────────────────────────────────────
     if fondo is not None:
-        mascara = _segmentar_por_diferencia(imagen_color, fondo)
+        mascara, diff_b, umbral = _segmentar_por_diferencia(imagen_color, fondo)
         contorno = _mejor_contorno_lateral(mascara, ancho, alto)
         if contorno is not None:
-            return contorno, "Diferencia con fondo de referencia (lateral)"
+            # Convex hull relleno → tapa huecos internos (rugosidades, roscas)
+            hull = cv2.convexHull(contorno)
+            hull_mask = np.zeros((alto, ancho), dtype=np.uint8)
+            cv2.fillPoly(hull_mask, [hull], 255)
+            # Trim: recorta filas inferiores con sombra débil y columnas laterales ruidosas
+            hull_mask = _recortar_bordes(hull_mask, diff_b, umbral)
+            cs, _ = cv2.findContours(hull_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contorno_final = max(cs, key=cv2.contourArea) if cs else contorno
+            return contorno_final, "Diferencia con fondo de referencia (lateral)"
 
     # ── Método 2: saturación HSV en ROI ───────────────────────────────────────
     hsv = cv2.cvtColor(imagen_color, cv2.COLOR_BGR2HSV)
@@ -173,17 +184,104 @@ def detectar_circulo_superior(imagen_color, radio_min=60, radio_max=130, fondo=N
 
 def _segmentar_por_diferencia(imagen_color, fondo_color):
     """
-    Calcula la diferencia absoluta imagen-fondo y devuelve una máscara binaria.
-    Aplica blur gaussiano antes de umbralizar con Otsu y morfología para limpiar.
+    Diferencia absoluta imagen-fondo con umbral adaptativo y morfología vertical.
+
+    Mejoras respecto a la versión con Otsu fijo:
+    1. Umbral adaptativo: p90 del borde + 1 std, en lugar de Otsu global. Captura
+       zonas tenues (roscas con brillo similar al fondo) sin activar el fondo limpio.
+    2. Cierre vertical 5×41: conecta los anillos de rosca con el cuerpo del niple
+       llenando los valles entre hilos adyacentes.
+    3. Cierre + apertura con kernel elíptico 7×7 para limpieza general.
+
+    Devuelve (mascara, diff_b, umbral) para que el llamador pueda usar diff_b en
+    _recortar_bordes sin recalcular la diferencia.
     """
     diff   = cv2.absdiff(imagen_color, fondo_color)
     diff_g = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
-    diff_g = cv2.GaussianBlur(diff_g, (5, 5), 0)
-    _, mascara = cv2.threshold(diff_g, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    diff_b = cv2.GaussianBlur(diff_g, (5, 5), 0)
+
+    alto, ancho = diff_b.shape
+
+    # Umbral adaptativo basado en el ruido del borde de la imagen
+    borde = 30
+    bordes = np.concatenate([
+        diff_b[:borde, :].ravel(), diff_b[-borde:, :].ravel(),
+        diff_b[:, :borde].ravel(), diff_b[:, -borde:].ravel(),
+    ])
+    noise_p90 = float(np.percentile(bordes, 90))
+    noise_std  = float(bordes.std())
+    umbral = max(noise_p90 + noise_std, 10.0)
+
+    mascara = (diff_b > umbral).astype(np.uint8) * 255
+
+    # Cierre vertical agresivo: 5 px ancho × 41 px alto
+    kern_v = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 41))
+    mascara = cv2.morphologyEx(mascara, cv2.MORPH_CLOSE, kern_v)
+
+    # Cierre + apertura con elipse para limpiar ruido general
     kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
     mascara = cv2.morphologyEx(mascara, cv2.MORPH_CLOSE, kern, iterations=2)
     mascara = cv2.morphologyEx(mascara, cv2.MORPH_OPEN, kern)
-    return mascara
+
+    return mascara, diff_b, umbral
+
+
+def _recortar_bordes(hull_mask, diff_b, umbral, dmin_fila=0.75, dmin_col=0.25):
+    """
+    Recorta filas inferiores y columnas laterales de la máscara donde la diferencia
+    original es débil (sombra de contacto o ruido morfológico de borde).
+
+    - Filas: escanea de abajo hacia arriba hasta la primera fila con ≥ dmin_fila
+      de píxeles activos en el rango horizontal de la pieza.
+    - Columnas: escanea de afuera hacia adentro (izq y der) hasta la primera columna
+      con ≥ dmin_col de píxeles activos en el rango vertical de la pieza.
+    """
+    filas_on = np.where(hull_mask.any(axis=1))[0]
+    if not len(filas_on):
+        return hull_mask
+    y_top, y_bot = int(filas_on[0]), int(filas_on[-1])
+
+    cols_on = np.where(hull_mask[y_top:y_bot + 1].any(axis=0))[0]
+    if not len(cols_on):
+        return hull_mask
+    x0, x1 = int(cols_on[0]), int(cols_on[-1])
+
+    out = hull_mask.copy()
+
+    # Trim filas inferiores (sombra de contacto)
+    for fila in range(y_bot, y_top - 1, -1):
+        franja = diff_b[fila, x0:x1 + 1]
+        den = float((franja > umbral).sum()) / max(len(franja), 1)
+        if den < dmin_fila:
+            out[fila, :] = 0
+        else:
+            break
+
+    # Recalcular límites verticales tras el trim de filas
+    filas2 = np.where(out.any(axis=1))[0]
+    if not len(filas2):
+        return out
+    y_top2, y_bot2 = int(filas2[0]), int(filas2[-1])
+
+    # Trim columnas izquierdas (ruido morfológico de borde)
+    for col in range(x0, x1):
+        franja = diff_b[y_top2:y_bot2 + 1, col]
+        den = float((franja > umbral).sum()) / max(len(franja), 1)
+        if den < dmin_col:
+            out[:, col] = 0
+        else:
+            break
+
+    # Trim columnas derechas
+    for col in range(x1, x0 - 1, -1):
+        franja = diff_b[y_top2:y_bot2 + 1, col]
+        den = float((franja > umbral).sum()) / max(len(franja), 1)
+        if den < dmin_col:
+            out[:, col] = 0
+        else:
+            break
+
+    return out
 
 
 def _mejor_contorno_lateral(mascara, ancho, alto):
