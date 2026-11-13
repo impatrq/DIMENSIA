@@ -1,5 +1,13 @@
 CLAUDE.md
 
+# Override de IP del backend por máquina: no versionar.
+raspberry/config_local.py
+
+# Archivos del sistema y Python
+.DS_Store
+__pycache__/
+*.pyc
+
 # Datos generados localmente por la calibración de cámaras y los reportes.
 # Son específicos de cada instalación física (cámara, iluminación, distancia)
 # y no forman parte del código fuente del proyecto.
@@ -7,3 +15,12 @@ raspberry/capturas/
 raspberry/calibracion_camaras.json
 raspberry/reportes/*.pdf
 raspberry/reportes/*.csv
+
+# Imágenes de prueba y fondos de referencia — no versionar.
+raspberry/tests_imagenes/
+raspberry/fondo_superior.jpg
+raspberry/fondo_lateral.jpg
+
+# Archivos binarios y temporales
+*.db
+ESP32_GENERIC-*.bin
