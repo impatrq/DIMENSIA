@@ -650,7 +650,8 @@ def _captura_mas_cercana_a_mediana(pasos, mediana_diametro):
 # ── Ciclo de inspección ───────────────────────────────────────────────────────
 
 def _ejecutar_ciclo(ser, cam_sup, cam_lat, procesador, nombre_pieza, pieza,
-                    n_pasos, sin_enviar, conservar_capturas, usar_iniciar=False):
+                    n_pasos, sin_enviar, conservar_capturas, usar_iniciar=False,
+                    visor=None):
     """
     Un ciclo completo: (INICIAR →) esperar ARRIBA → consultar pieza → n pasos
     → mediana → evaluar → FIN → POST → limpiar capturas → (esperar LISTO).
@@ -726,6 +727,12 @@ def _ejecutar_ciclo(ser, cam_sup, cam_lat, procesador, nombre_pieza, pieza,
                 n + 1, n_pasos, angulo, e))
             pasos.append({"capturas": None, "diametro": None, "largo": None, "alto": None})
             continue
+
+        if visor is not None:
+            visor.publicar_rutas(
+                capturas["superior"], capturas["lateral"], procesador,
+                "PASO {} de {} - angulo {}".format(n + 1, n_pasos, angulo),
+            )
 
         med_sup  = procesador.procesar_superior(capturas["superior"])
         med_lat  = procesador.procesar_lateral(capturas["lateral"])
@@ -870,6 +877,10 @@ def main():
         "--debug-serial", action="store_true",
         help="Imprimir cada línea recibida de la ESP32 con prefijo [ESP32]",
     )
+    parser.add_argument(
+        "--visor", action="store_true",
+        help="Publicar las imágenes anotadas en http://DIMENSIA.local:8081 después de cada paso",
+    )
     args = parser.parse_args()
 
     global _DEBUG_SERIAL
@@ -922,6 +933,12 @@ def main():
 
     procesador = ProcesadorImagenes()
 
+    visor = None
+    if args.visor:
+        from visor_vivo import VisorVivo
+        visor = VisorVivo()
+        print("Visor en vivo: http://DIMENSIA.local:{}".format(visor.puerto))
+
     print("\nSistema listo. Esperando ciclos (Ctrl+C para salir)...\n")
 
     try:
@@ -931,6 +948,7 @@ def main():
                 nombre_pieza, pieza,
                 args.pasos, args.sin_enviar, args.conservar_capturas,
                 usar_iniciar=args.iniciar,
+                visor=visor,
             )
     except KeyboardInterrupt:
         print("\nInterrumpido por el usuario.")

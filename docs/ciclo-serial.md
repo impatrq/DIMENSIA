@@ -181,6 +181,7 @@ python ciclo_serial.py --sin-serial --sin-enviar --pasos 4
 | `--sin-enviar` | No hace POST al backend. Muestra el payload por pantalla. |
 | `--pasos N` | Número de pasos de rotación por ciclo (default: 8). |
 | `--conservar-capturas` | No borra los JPG del ciclo tras el POST. Útil para depuración. |
+| `--visor` | Publica la imagen anotada (superior + lateral) en `http://DIMENSIA.local:8081` después de cada paso. Se abre desde cualquier navegador en la red local. |
 
 ## Qué se probó (lógica, sin hardware)
 
